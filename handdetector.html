@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hand Detector</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    video, canvas {
+      display: none;
+    }
+    #handCanvas {
+      display: block;
+      border: 2px solid lime;
+    }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="handCanvas" width="640" height="480"></canvas>
+
+  <script type="module">
+    import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("handCanvas");
+    const ctx = canvas.getContext("2d");
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => resolve(video);
+      });
+    }
+
+    async function init() {
+      await setupCamera();
+
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+      );
+
+      const handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: `https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task`
+        },
+        runningMode: "VIDEO",
+        numHands: 1
+      });
+
+      function drawHandOnly() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const nowInMs = performance.now();
+        const result = handLandmarker.detectForVideo(video, nowInMs);
+
+        if (result.landmarks?.length) {
+          const landmarks = result.landmarks[0];
+          const xs = landmarks.map(p => p.x * video.videoWidth);
+          const ys = landmarks.map(p => p.y * video.videoHeight);
+          const minX = Math.min(...xs);
+          const minY = Math.min(...ys);
+          const maxX = Math.max(...xs);
+          const maxY = Math.max(...ys);
+
+          const pad = 40;
+          const boxX = Math.max(minX - pad, 0);
+          const boxY = Math.max(minY - pad, 0);
+          const boxW = Math.min(maxX - minX + 2 * pad, video.videoWidth - boxX);
+          const boxH = Math.min(maxY - minY + 2 * pad, video.videoHeight - boxY);
+
+          ctx.drawImage(video, boxX, boxY, boxW, boxH, 0, 0, canvas.width, canvas.height);
+        }
+
+        requestAnimationFrame(drawHandOnly);
+      }
+
+      drawHandOnly();
+    }
+
+    init();
+  </script>
+</body>
+</html>
