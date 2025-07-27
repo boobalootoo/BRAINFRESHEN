@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gesture-Controlled Book</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #222;
+      font-family: sans-serif;
+    }
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    video, canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    #book {
+      position: absolute;
+      width: 60%;
+      height: 80%;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      box-shadow: 0 0 30px rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3em;
+      border-radius: 10px;
+      transition: transform 0.4s ease;
+      z-index: 1;
+    }
+    #info-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 10px 15px;
+      background: rgba(255,255,255,0.8);
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 3;
+    }
+    #info-box {
+      position: absolute;
+      top: 60px;
+      right: 10px;
+      width: 300px;
+      background: white;
+      color: #222;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.4);
+      z-index: 3;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div id="book">📖 Page 1</div>
+    <button id="info-btn">ℹ️ Info</button>
+    <div id="info-box">
+      <strong>How to use:</strong><br>
+      - Hold your hand above the book<br>
+      - Move hand left/right to flip pages<br>
+      - The skeleton will track your hand<br>
+      - Page turns are animated with sound
+    </div>
+  </div>
+
+  <!-- Sound -->
+  <audio id="flip-sound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_9a47918339.mp3" preload="auto"></audio>
+
+  <!-- MediaPipe Hands & drawing utils -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const book = document.getElementById('book');
+    const flipSound = document.getElementById('flip-sound');
+    const infoBtn = document.getElementById('info-btn');
+    const infoBox = document.getElementById('info-box');
+
+    let page = 1;
+    let lastX = null;
+    let gestureCooldown = false;
+
+    function turnPage(dir) {
+      if (gestureCooldown) return;
+      gestureCooldown = true;
+
+      page += dir;
+      if (page < 1) page = 1;
+
+      book.innerText = `📖 Page ${page}`;
+      flipSound.currentTime = 0;
+      flipSound.play();
+
+      book.style.transform = `translate(-50%, -50%) rotateY(${dir > 0 ? '' : '-'}10deg)`;
+      setTimeout(() => {
+        book.style.transform = 'translate(-50%, -50%) rotateY(0deg)';
+        gestureCooldown = false;
+      }, 400);
+
+      console.log(`Turned to page ${page}`);
+    }
+
+    // Toggle info box
+    infoBtn.onclick = () => {
+      infoBox.style.display = infoBox.style.display === 'none' ? 'block' : 'none';
+    };
+
+    function onResults(results) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        for (let landmarks of results.multiHandLandmarks) {
+          window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#0f0', lineWidth: 3});
+          window.drawLandmarks(ctx, landmarks, {color: '#0f0', lineWidth: 1});
+        }
+
+        // Use only first hand
+        const x = results.multiHandLandmarks[0][9].x;
+
+        if (lastX !== null) {
+          const diff = x - lastX;
+          if (Math.abs(diff) > 0.1) {
+            if (diff > 0) {
+              console.log("Gesture: Swipe Right");
+              turnPage(-1); // backward
+            } else {
+              console.log("Gesture: Swipe Left");
+              turnPage(1); // forward
+            }
+          }
+        }
+        lastX = x;
+      } else {
+        lastX = null;
+      }
+    }
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.8,
+      minTrackingConfidence: 0.8
+    });
+
+    hands.onResults(onResults);
+
+    const camera = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({image: video});
+      },
+      width: 1280,
+      height: 720
+    });
+
+    camera.start();
+  </script>
+</body>
+</html>
