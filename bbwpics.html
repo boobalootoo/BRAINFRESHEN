@@ -333,6 +333,9 @@
         const mediaAssets = new Map();
         let currentMediaId = null; // Stores the ID of the last uploaded media to be inserted
 
+        // New map to store media specifically for blank visual pages
+        let mediaOnBlankPages = new Map(); // Map<visualPageNumber, mediaId[]>
+
         // Function to show a custom message box
         function showMessage(message) {
             messageText.textContent = message;
@@ -348,6 +351,22 @@
 
         // Event listener for the message box close button
         messageBoxCloseButton.addEventListener('click', hideMessageBox);
+
+        // Function to update the max value for the media page number input
+        function updateMediaPageNumberMax() {
+            const showOnePagePerSpread = onePageSpreadToggle.checked;
+            if (showOnePagePerSpread) {
+                // If one page per spread, the max visual page number is double the content pages
+                mediaPageNumberInput.max = pagesContent.length > 0 ? pagesContent.length * 2 : 1;
+            } else {
+                // If two pages per spread, the max visual page number is the same as content pages
+                mediaPageNumberInput.max = pagesContent.length > 0 ? pagesContent.length : 1;
+            }
+            // Ensure the current value is not greater than the new max
+            if (parseInt(mediaPageNumberInput.value) > parseInt(mediaPageNumberInput.max)) {
+                mediaPageNumberInput.value = mediaPageNumberInput.max;
+            }
+        }
 
         // Function to process content and update the book
         function processContent() {
@@ -370,6 +389,7 @@
                 `;
                 currentPageIndex = 0; // Reset index
                 updateNavigationButtons();
+                updateMediaPageNumberMax(); // Update max pages even if empty
                 return;
             }
 
@@ -379,8 +399,40 @@
             contentInputSection.classList.add('hidden');
             addMediaSection.classList.remove('hidden');
             bookDisplaySection.classList.remove('hidden');
-            mediaPageNumberInput.max = pagesContent.length; // Set max page number for media insertion
+            updateMediaPageNumberMax(); // Set max page number for media insertion
         }
+
+        // Function to process page content and replace media placeholders, and add media from blank pages map
+        function processPageContent(content, visualPageNum) {
+            let processedContent = content.replace(/---MEDIA:([a-zA-Z0-9-]+)---/g, (match, mediaId) => {
+                const media = mediaAssets.get(mediaId);
+                if (media) {
+                    if (media.type.startsWith('image')) {
+                        return `<img src="${media.dataUrl}" alt="${media.fileName}" class="mb-4">`;
+                    } else if (media.type.startsWith('video')) {
+                        return `<video controls src="${media.dataUrl}" class="mb-4"></video>`;
+                    }
+                }
+                return ''; // Return empty string if media not found
+            });
+
+            // Add media specifically placed on this visual page (e.g., blank pages)
+            if (mediaOnBlankPages.has(visualPageNum)) {
+                const mediaIds = mediaOnBlankPages.get(visualPageNum);
+                mediaIds.forEach(mediaId => {
+                    const media = mediaAssets.get(mediaId);
+                    if (media) {
+                        if (media.type.startsWith('image')) {
+                            processedContent = `<img src="${media.dataUrl}" alt="${media.fileName}" class="mb-4">` + processedContent;
+                        } else if (media.type.startsWith('video')) {
+                            processedContent = `<video controls src="${media.dataUrl}" class="mb-4"></video>` + processedContent;
+                        }
+                    }
+                });
+            }
+            return processedContent;
+        }
+
 
         // Function to render the book pages
         function renderBook() {
@@ -388,46 +440,41 @@
 
             const showOnePagePerSpread = onePageSpreadToggle.checked;
 
-            // Content for the left page
             let leftPageContent = '';
-            let leftPageNumber = currentPageIndex + 1; // Actual content page number
-            if (currentPageIndex < pagesContent.length) {
-                leftPageContent = pagesContent[currentPageIndex];
-            }
-
-            // Content for the right page
             let rightPageContent = '';
-            let rightPageNumber = (showOnePagePerSpread ? currentPageIndex + 2 : currentPageIndex + 2); // Visual page number
+            let leftVisualPageNumber;
+            let rightVisualPageNumber;
 
-            if (!showOnePagePerSpread && (currentPageIndex + 1) < pagesContent.length) {
-                // If not one-page-per-spread, display the next content page on the right
-                rightPageContent = pagesContent[currentPageIndex + 1];
-            } else if (showOnePagePerSpread) {
-                // If one-page-per-spread, the right page is always blank
-                rightPageContent = ''; // Explicitly make it blank
-            }
+            if (showOnePagePerSpread) {
+                // One content page per spread (left page has content, right is blank)
+                // Visual page numbers increment by 2 for each content page
+                leftVisualPageNumber = (currentPageIndex * 2) + 1;
+                rightVisualPageNumber = (currentPageIndex * 2) + 2;
 
-            // Function to process page content and replace media placeholders
-            function processPageContent(content) {
-                return content.replace(/---MEDIA:([a-zA-Z0-9-]+)---/g, (match, mediaId) => {
-                    const media = mediaAssets.get(mediaId);
-                    if (media) {
-                        if (media.type.startsWith('image')) {
-                            return `<img src="${media.dataUrl}" alt="${media.fileName}" class="mb-4">`;
-                        } else if (media.type.startsWith('video')) {
-                            return `<video controls src="${media.dataUrl}" class="mb-4"></video>`;
-                        }
-                    }
-                    return ''; // Return empty string if media not found
-                });
+                if (currentPageIndex < pagesContent.length) {
+                    leftPageContent = pagesContent[currentPageIndex];
+                }
+                rightPageContent = ''; // Always blank, content will be empty but media might be present
+            } else {
+                // Two content pages per spread
+                // Visual page numbers directly correspond to content page indices
+                leftVisualPageNumber = currentPageIndex + 1;
+                rightVisualPageNumber = currentPageIndex + 2;
+
+                if (currentPageIndex < pagesContent.length) {
+                    leftPageContent = pagesContent[currentPageIndex];
+                }
+                if ((currentPageIndex + 1) < pagesContent.length) {
+                    rightPageContent = pagesContent[currentPageIndex + 1];
+                }
             }
 
             // Create left page element
             const leftPageDiv = document.createElement('div');
             leftPageDiv.classList.add('book-page', 'left-page');
             leftPageDiv.innerHTML = `
-                ${processPageContent(leftPageContent) || '<span class="text-gray-400">No content on this page.</span>'}
-                ${leftPageContent ? `<span class="page-number">${leftPageNumber}</span>` : ''}
+                ${processPageContent(leftPageContent, leftVisualPageNumber) || '<span class="text-gray-400">No content on this page.</span>'}
+                ${leftPageContent || mediaOnBlankPages.has(leftVisualPageNumber) ? `<span class="page-number">${leftVisualPageNumber}</span>` : ''}
             `;
             bookDisplay.appendChild(leftPageDiv);
 
@@ -435,8 +482,8 @@
             const rightPageDiv = document.createElement('div');
             rightPageDiv.classList.add('book-page', 'right-page');
             rightPageDiv.innerHTML = `
-                ${processPageContent(rightPageContent) || '<span class="text-gray-400">No content on this page.</span>'}
-                ${(rightPageContent || showOnePagePerSpread) ? `<span class="page-number">${rightPageNumber}</span>` : ''}
+                ${processPageContent(rightPageContent, rightVisualPageNumber) || '<span class="text-gray-400">No content on this page.</span>'}
+                ${(rightPageContent || showOnePagePerSpread || mediaOnBlankPages.has(rightVisualPageNumber)) ? `<span class="page-number">${rightVisualPageNumber}</span>` : ''}
             `;
             bookDisplay.appendChild(rightPageDiv);
 
@@ -481,6 +528,7 @@
 
         // Event listener for the "one page per spread" toggle
         onePageSpreadToggle.addEventListener('change', () => {
+            updateMediaPageNumberMax(); // Update max pages when toggle changes
             renderBook(); // Re-render the book with the new setting
         });
 
@@ -570,8 +618,21 @@
                         const idToDelete = e.target.dataset.mediaId;
                         mediaAssets.delete(idToDelete);
                         listItem.remove();
+
                         // Remove placeholder from pagesContent if it exists
                         pagesContent = pagesContent.map(page => page.replace(`---MEDIA:${idToDelete}---`, ''));
+
+                        // Remove from mediaOnBlankPages if it exists
+                        mediaOnBlankPages.forEach((mediaIds, visualPageNum) => {
+                            const index = mediaIds.indexOf(idToDelete);
+                            if (index > -1) {
+                                mediaIds.splice(index, 1);
+                            }
+                            if (mediaIds.length === 0) {
+                                mediaOnBlankPages.delete(visualPageNum); // Remove entry if no media left
+                            }
+                        });
+
                         renderBook(); // Re-render to reflect removal
                         if (uploadedMediaList.children.length === 0) {
                             uploadedMediaList.innerHTML = '<p class="text-gray-500 text-sm">No media uploaded yet.</p>';
@@ -594,20 +655,41 @@
                 return;
             }
 
-            const pageNumber = parseInt(mediaPageNumberInput.value, 10);
-            if (isNaN(pageNumber) || pageNumber < 1 || pageNumber > pagesContent.length) {
-                showMessage(`Please enter a valid page number between 1 and ${pagesContent.length}.`);
+            const visualPageNumber = parseInt(mediaPageNumberInput.value, 10);
+            const showOnePagePerSpread = onePageSpreadToggle.checked;
+
+            if (isNaN(visualPageNumber) || visualPageNumber < 1 || visualPageNumber > parseInt(mediaPageNumberInput.max)) {
+                showMessage(`Please enter a valid page number between 1 and ${mediaPageNumberInput.max}.`);
                 return;
             }
 
-            const targetPageIndex = pageNumber - 1;
             const mediaPlaceholder = `---MEDIA:${currentMediaId}---`;
 
-            // Prepend the media placeholder to the content of the target page
-            pagesContent[targetPageIndex] = mediaPlaceholder + '\n' + pagesContent[targetPageIndex];
+            if (showOnePagePerSpread && visualPageNumber % 2 === 0) {
+                // If one page per spread AND it's an even visual page number (a blank page)
+                if (!mediaOnBlankPages.has(visualPageNumber)) {
+                    mediaOnBlankPages.set(visualPageNumber, []);
+                }
+                mediaOnBlankPages.get(visualPageNumber).push(currentMediaId);
+                showMessage(`Media inserted on blank visual page ${visualPageNumber}.`);
+            } else {
+                // If two pages per spread OR it's an odd visual page number (a content page)
+                let targetContentPageIndex;
+                if (showOnePagePerSpread) {
+                    targetContentPageIndex = Math.floor((visualPageNumber - 1) / 2);
+                } else {
+                    targetContentPageIndex = visualPageNumber - 1;
+                }
 
-            renderBook(); // Re-render the book with the new media
-            showMessage(`Media inserted on page ${pageNumber}.`);
+                if (targetContentPageIndex < 0 || targetContentPageIndex >= pagesContent.length) {
+                     showMessage(`Cannot insert media on visual page ${visualPageNumber}. No corresponding content page.`);
+                     return;
+                }
+                pagesContent[targetContentPageIndex] = mediaPlaceholder + '\n' + pagesContent[targetContentPageIndex];
+                showMessage(`Media inserted on content page ${visualPageNumber}.`);
+            }
+
+            renderBook();
             currentMediaId = null; // Clear current media after insertion
             mediaUploadInput.value = ''; // Clear file input
         });
