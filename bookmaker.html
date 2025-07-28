@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Paged Text Editor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    textarea {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .page-row {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      gap: 10px;
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Upload Text</h1>
+  <input type="file" id="fileInput" accept=".txt">
+  <button id="downloadBtn">Download .html Book</button>
+  <div id="pages"></div>
+
+  <script>
+    let pages = [];
+
+    function renderPages() {
+      const container = document.getElementById("pages");
+      container.innerHTML = "";
+
+      pages.forEach((page, index) => {
+        const row = document.createElement("div");
+        row.className = "page-row";
+
+        const label = document.createElement("div");
+        label.textContent = "Page " + (index + 1);
+        label.style.width = "60px";
+        label.style.fontWeight = "bold";
+        label.style.marginTop = "6px";
+
+        const textarea = document.createElement("textarea");
+        textarea.value = page.text || "";
+        textarea.rows = 10;
+        textarea.addEventListener("input", () => {
+          page.text = textarea.value;
+        });
+
+        const controls = document.createElement("div");
+        controls.className = "controls";
+
+        const insertBtn = document.createElement("button");
+        insertBtn.textContent = "+ Insert Below";
+        insertBtn.onclick = () => {
+          pages.splice(index + 1, 0, { text: "", media: null });
+          renderPages();
+        };
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "🗑 Delete";
+        deleteBtn.onclick = () => {
+          pages.splice(index, 1);
+          renderPages();
+        };
+
+        const mediaInput = document.createElement("input");
+        mediaInput.type = "file";
+        mediaInput.accept = "image/*,video/*";
+        mediaInput.onchange = (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            page.media = { type: file.type, data: event.target.result };
+            renderPages();
+          };
+          reader.readAsDataURL(file);
+        };
+
+        controls.appendChild(insertBtn);
+        controls.appendChild(deleteBtn);
+        controls.appendChild(mediaInput);
+
+        const contentColumn = document.createElement("div");
+        contentColumn.style.flex = "1";
+        contentColumn.appendChild(textarea);
+
+        if (page.media) {
+          const media = document.createElement(page.media.type.startsWith("video") ? "video" : "img");
+          if (page.media.type.startsWith("video")) {
+            media.controls = true;
+            media.width = 200;
+          } else {
+            media.style.maxWidth = "200px";
+            media.style.display = "block";
+            media.style.marginTop = "10px";
+          }
+          media.src = page.media.data;
+          contentColumn.appendChild(media);
+        }
+
+        row.appendChild(label);
+        row.appendChild(contentColumn);
+        row.appendChild(controls);
+        container.appendChild(row);
+      });
+    }
+
+    document.getElementById("fileInput").addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const text = event.target.result;
+        pages = text.split(/---PAGEBREAK---/i).map(p => ({ text: p.trim(), media: null }));
+        renderPages();
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById("downloadBtn").addEventListener("click", function () {
+      const spreads = [];
+      for (let i = 0; i < pages.length; i += 2) {
+        const left = pages[i];
+        const right = pages[i + 1];
+
+        const formatPage = (page, pageNum) => {
+          if (!page) return `<div class="page"></div>`;
+          const media = page.media
+            ? page.media.type.startsWith("video")
+              ? `<video controls width="100%" src="${page.media.data}"></video>`
+              : `<img src="${page.media.data}" style="max-width:100%; margin-top:10px;">`
+            : "";
+          return `
+            <div class="page">
+              <div class="page-number">Page ${pageNum}</div>
+              <div class="text">${page.text.replace(/\n/g, "<br>")}</div>
+              ${media}
+            </div>`;
+        };
+
+        spreads.push(`
+          <div class="spread">
+            ${formatPage(left, i + 1)}
+            ${formatPage(right, i + 2)}
+          </div>`);
+      }
+
+      const safeScript = `<script>
+let current = 0;
+const spreads = document.querySelectorAll('.spread');
+spreads[0].classList.add('active');
+function showSpread(index) {
+  spreads[current].classList.remove('active');
+  current = index;
+  spreads[current].classList.add('active');
+}
+function nextSpread() {
+  if (current < spreads.length - 1) showSpread(current + 1);
+}
+function prevSpread() {
+  if (current > 0) showSpread(current - 1);
+}
+// avoid breaking HTML parsing:
+</scr` + `ipt>`;
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>My Book</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #ccc;
+      font-family: Georgia, serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 { margin: 20px; }
+    .book-container {
+      perspective: 2000px;
+      width: 90vw;
+      max-width: 1000px;
+      height: 90vh;
+      overflow: hidden;
+    }
+    .spread {
+      display: none;
+      width: 100%;
+      height: 100%;
+      background: white;
+      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+    }
+    .spread.active {
+      display: flex;
+    }
+    .page {
+      flex: 1;
+      padding: 40px;
+      box-sizing: border-box;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      position: relative;
+      background: #fff;
+    }
+    .text {
+      white-space: normal;
+      margin-top: 20px;
+    }
+    .page-number {
+      font-size: 14px;
+      color: #888;
+      position: absolute;
+      bottom: 10px;
+    }
+    .nav-buttons {
+      margin: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 0 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>My Book</h1>
+  <div class="nav-buttons">
+    <button onclick="prevSpread()">⬅ Prev</button>
+    <button onclick="nextSpread()">Next ➡</button>
+  </div>
+  <div class="book-container">
+    ${spreads.join("")}
+  </div>
+  ${safeScript}
+</body>
+</html>`;
+
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "my-book.html";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
