@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK Bird Watcher</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js CDN for sound playback -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        /* Custom styles for animations and layout adjustments */
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrolling */
+        }
+
+        .bird-popup {
+            position: absolute;
+            animation: fadeInOut 5s forwards; /* Fade in and out */
+            pointer-events: none; /* Allow clicks to pass through to video */
+            z-index: 10;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: scale(0.5); }
+            10% { opacity: 1; transform: scale(1); }
+            90% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0.5); }
+        }
+
+        .bird-item-image {
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .bird-item-image:hover {
+            transform: scale(1.05);
+        }
+
+        .bird-item-name {
+            cursor: pointer;
+            transition: color 0.2s ease-in-out;
+        }
+
+        .bird-item-name:hover {
+            color: #3b82f6; /* Tailwind blue-500 */
+        }
+
+        /* Ensure video fills container and maintains aspect ratio */
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Cover the container while maintaining aspect ratio */
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            height: calc(100vh - 150px); /* Adjust height to make space for the bottom bar */
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .bottom-bar {
+            height: 150px;
+            overflow-x: auto; /* Enable horizontal scrolling */
+            white-space: nowrap; /* Prevent wrapping of items */
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        }
+
+        .scroll-container {
+            display: flex;
+            /* gap: 1rem; Removed gap for rectangular items to be right next to each other */
+            padding: 1rem;
+        }
+
+        /* New style for rectangular gallery images */
+        .bird-gallery-item {
+            display: inline-flex; /* Use inline-flex for items to sit next to each other */
+            flex-direction: column;
+            align-items: center;
+            padding: 0.5rem; /* Reduced padding to make them closer */
+            background-color: #f9fafb; /* Light background for items */
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            margin-right: 0.25rem; /* Small margin to separate items, adjust as needed */
+        }
+
+        .bird-gallery-item img {
+            width: 80px; /* Fixed width for rectangular image */
+            height: 80px; /* Fixed height for rectangular image */
+            object-fit: contain; /* Ensure image fits within the rectangular frame */
+            border-radius: 0.25rem; /* Slightly rounded corners for the image itself */
+            border: 2px solid #bfdbfe; /* Light blue border */
+            margin-bottom: 0.25rem;
+        }
+
+        .draggable-bird {
+            position: absolute;
+            cursor: grab;
+            z-index: 20; /* Higher z-index for dragged birds */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col h-screen">
+
+    <!-- Mode Toggle Buttons -->
+    <div class="flex justify-center p-4 bg-white shadow-md rounded-b-lg">
+        <button id="id-mode-btn" class="px-4 py-2 mr-2 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">ID Mode</button>
+        <button id="dj-mode-btn" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg shadow-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">DJ Mode</button>
+    </div>
+
+    <!-- Main Camera Feed and Pop-up Birds Container -->
+    <div id="camera-container" class="camera-container rounded-lg shadow-lg mt-4">
+        <video id="camera-feed" class="rounded-lg" autoplay playsinline muted></video>
+        <div id="loading-message" class="absolute text-white text-xl">Loading camera...</div>
+        <div id="error-message" class="absolute text-red-500 text-xl hidden"></div>
+        <!-- Pop-up birds will be appended here in ID mode -->
+        <!-- Dragged birds will be appended here in DJ mode -->
+    </div>
+
+    <!-- Bottom Bar with Bird Species Gallery -->
+    <div id="bottom-bar" class="bottom-bar bg-white mt-4 rounded-lg shadow-md">
+        <div id="bird-gallery" class="scroll-container">
+            <!-- Bird items will be dynamically loaded here -->
+        </div>
+    </div>
+
+    <script>
+        // Ensure the DOM is fully loaded before running scripts
+        document.addEventListener('DOMContentLoaded', () => {
+            const cameraFeed = document.getElementById('camera-feed');
+            const loadingMessage = document.getElementById('loading-message');
+            const errorMessage = document.getElementById('error-message');
+            const cameraContainer = document.getElementById('camera-container');
+            const birdGallery = document.getElementById('bird-gallery');
+            const idModeBtn = document.getElementById('id-mode-btn');
+            const djModeBtn = document.getElementById('dj-mode-btn');
+
+            // Base URL for your bird assets on GitHub - Corrected to raw.githubusercontent.com
+            const baseURL = "https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/bird/";
+
+            // Array of UK bird species data with actual image and sound paths
+            const birdSpecies = [
+                { name: "Blackbird", fileName: "blackbird" },
+                { name: "Wren", fileName: "wren" },
+                { name: "Great Tit", fileName: "greattit" },
+                { name: "Blue Tit", fileName: "bluetit" },
+                { name: "Sparrow", fileName: "sparrow" },
+                { name: "Starling", fileName: "starling" },
+                { name: "Pigeon", fileName: "pigeon" },
+                { name: "Goldfinch", fileName: "goldfinch" },
+                { name: "Chaffinch", fileName: "chaffinch" },
+                { name: "Song Thrush", fileName: "songthrush" },
+                { name: "Chiffchaff", fileName: "chiffchaff" },
+                { name: "Blackcap", fileName: "blackcap" },
+                { name: "Dunnock", fileName: "dunnock" },
+                { name: "Greenfinch", fileName: "greenfinch" },
+                { name: "Robin", fileName: "robin" }
+            ];
+
+            // Pre-load all bird sounds using Tone.Player
+            const birdPlayers = {};
+            birdSpecies.forEach(bird => {
+                const soundPath = `${baseURL}${bird.fileName}.mp3`;
+                birdPlayers[bird.name] = new Tone.Player(soundPath).toDestination();
+                birdPlayers[bird.name].loop = true; // Enable looping for DJ mode
+                birdPlayers[bird.name].onload = () => {
+                    // console.log(`${bird.name} sound loaded.`);
+                };
+                birdPlayers[bird.name].onerror = (e) => {
+                    console.error(`Error loading ${bird.name} sound:`, e);
+                };
+            });
+
+            let currentMode = 'id'; // 'id' or 'dj'
+            let spawnIntervalId; // To store the interval for ID mode pop-ups
+            let draggedBird = null; // To store the currently dragged bird element
+            let offsetX, offsetY; // To store offset for dragging
+
+            // Define a constant for the gallery image size for drag feedback
+            const GALLERY_IMAGE_SIZE = 80; // Matches the width/height in .bird-gallery-item img
+
+            // Function to start the camera feed
+            async function startCamera() {
+                try {
+                    // Prefer rear camera on mobile devices
+                    const constraints = {
+                        video: {
+                            facingMode: { exact: "environment" } // Try rear camera
+                        }
+                    };
+                    let stream;
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    } catch (e) {
+                        // Fallback to default camera if rear camera is not available or permission denied
+                        console.warn("Rear camera not available or permission denied, falling back to default camera.", e);
+                        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    }
+
+                    cameraFeed.srcObject = stream;
+                    loadingMessage.classList.add('hidden');
+                    cameraFeed.classList.remove('hidden');
+                } catch (err) {
+                    console.error("Error accessing camera: ", err);
+                    loadingMessage.classList.add('hidden');
+                    errorMessage.classList.remove('hidden');
+                    errorMessage.textContent = `Error: ${err.name}. Please allow camera access.`;
+                }
+            }
+
+            // Function to create and display a random bird pop-up (ID Mode)
+            function spawnRandomBird() {
+                const randomIndex = Math.floor(Math.random() * birdSpecies.length);
+                const bird = birdSpecies[randomIndex];
+
+                const birdImage = document.createElement('img');
+                birdImage.src = `${baseURL}${bird.fileName}.png`;
+                birdImage.alt = bird.name;
+                birdImage.onerror = () => {
+                    console.error(`Failed to load image for ${bird.name}. Please check if the file '${bird.fileName}.png' exists with the correct name and case at: ${birdImage.src}`);
+                    birdImage.src = `https://placehold.co/100x100/CCCCCC/000000?text=Error`; // Fallback placeholder
+                };
+                birdImage.classList.add('bird-popup', 'rounded-full', 'shadow-lg');
+
+                // Random size (e.g., between 60px and 120px)
+                const size = Math.floor(Math.random() * (120 - 60 + 1)) + 60;
+                birdImage.style.width = `${size}px`;
+                birdImage.style.height = `${size}px`;
+
+                // Random horizontal flip
+                if (Math.random() > 0.5) {
+                    birdImage.style.transform = 'scaleX(-1)';
+                } else {
+                    birdImage.style.transform = 'scaleX(1)';
+                }
+
+                // Random positioning within the camera container
+                const containerRect = cameraContainer.getBoundingClientRect();
+                const maxX = containerRect.width - size;
+                const maxY = containerRect.height - size;
+
+                const randomX = Math.random() * maxX;
+                const randomY = Math.random() * (maxY - 50);
+
+                birdImage.style.left = `${randomX}px`;
+                birdImage.style.top = `${randomY}px`;
+
+                cameraContainer.appendChild(birdImage);
+
+                setTimeout(() => {
+                    birdImage.remove();
+                }, 5000);
+            }
+
+            // Function to populate the bottom gallery bar
+            function populateBirdGallery() {
+                birdSpecies.forEach(bird => {
+                    const birdItem = document.createElement('div');
+                    birdItem.classList.add('bird-gallery-item', 'cursor-pointer', 'select-none'); // Add custom class
+
+                    // Bird Image (clickable for sound, draggable in DJ mode)
+                    const img = document.createElement('img');
+                    img.src = `${baseURL}${bird.fileName}.png`;
+                    img.alt = bird.name;
+                    img.onerror = () => {
+                        console.error(`Failed to load image for ${bird.name}. Please check if the file '${bird.fileName}.png' exists with the correct name and case at: ${img.src}`);
+                        img.src = `https://placehold.co/80x80/CCCCCC/000000?text=Error`; // Fallback placeholder
+                    };
+                    img.classList.add('bird-item-image'); // Tailwind classes now handled by custom style
+                    img.title = `Click to play/stop ${bird.name}'s song`;
+
+                    // Bird Name (clickable for speech)
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = bird.name;
+                    nameSpan.classList.add('bird-item-name', 'text-sm', 'font-semibold', 'text-gray-800', 'hover:text-blue-600');
+                    nameSpan.title = `Click to hear ${bird.name}`;
+                    nameSpan.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Prevent image click event from firing
+                        const utterance = new SpeechSynthesisUtterance(bird.name);
+                        speechSynthesis.speak(utterance);
+                    });
+
+                    birdItem.appendChild(img);
+                    birdItem.appendChild(nameSpan);
+                    birdGallery.appendChild(birdItem);
+
+                    // Event listener for image click (play/stop song)
+                    img.addEventListener('click', async () => {
+                        if (Tone.context.state !== 'running') {
+                            await Tone.start();
+                        }
+                        const player = birdPlayers[bird.name];
+                        if (player) {
+                            if (player.state === 'started') {
+                                player.stop(); // Stop if already playing
+                            } else {
+                                player.start(); // Start if not playing
+                            }
+                        }
+                    });
+
+                    // Drag and Drop functionality for DJ mode
+                    birdItem.setAttribute('draggable', true);
+                    birdItem.dataset.birdName = bird.name; // Store bird name for easy access
+
+                    birdItem.addEventListener('dragstart', (e) => {
+                        if (currentMode === 'dj') {
+                            draggedBird = birdItem;
+                            // Store the offset of the mouse from the top-left of the image
+                            offsetX = e.clientX - birdItem.getBoundingClientRect().left;
+                            offsetY = e.clientY - birdItem.getBoundingClientRect().top;
+                            e.dataTransfer.effectAllowed = 'copy';
+                            // Create a dummy image for drag feedback (optional, but good practice)
+                            const dragImg = new Image();
+                            dragImg.src = img.src;
+                            // Use GALLERY_IMAGE_SIZE for drag image offset
+                            e.dataTransfer.setDragImage(dragImg, GALLERY_IMAGE_SIZE / 2, GALLERY_IMAGE_SIZE / 2);
+                        } else {
+                            e.preventDefault(); // Prevent drag in ID mode
+                        }
+                    });
+                });
+            }
+
+            // DJ Mode Drag and Drop Handlers for camera container
+            cameraContainer.addEventListener('dragover', (e) => {
+                if (currentMode === 'dj') {
+                    e.preventDefault(); // Allow drop
+                    e.dataTransfer.dropEffect = 'copy';
+                }
+            });
+
+            cameraContainer.addEventListener('drop', async (e) => {
+                if (currentMode === 'dj' && draggedBird) {
+                    e.preventDefault();
+
+                    const birdName = draggedBird.dataset.birdName;
+                    const birdData = birdSpecies.find(b => b.name === birdName);
+
+                    if (birdData) {
+                        const newBirdInstance = document.createElement('img');
+                        newBirdInstance.src = `${baseURL}${birdData.fileName}.png`;
+                        newBirdInstance.alt = birdData.name;
+                        newBirdInstance.onerror = () => {
+                            console.error(`Failed to load image for ${birdData.name}. Please check if the file '${birdData.fileName}.png' exists with the correct name and case at: ${newBirdInstance.src}`);
+                            newBirdInstance.src = `https://placehold.co/100x100/CCCCCC/000000?text=Error`;
+                        };
+                        newBirdInstance.classList.add('draggable-bird', 'rounded-full', 'shadow-lg', 'w-24', 'h-24'); // Fixed size for dragged birds
+
+                        // Calculate position relative to the camera container
+                        const containerRect = cameraContainer.getBoundingClientRect();
+                        const x = e.clientX - containerRect.left - offsetX;
+                        const y = e.clientY - containerRect.top - offsetY;
+
+                        newBirdInstance.style.left = `${x}px`;
+                        newBirdInstance.style.top = `${y}px`;
+
+                        cameraContainer.appendChild(newBirdInstance);
+
+                        // Make the newly dropped bird draggable
+                        let isDragging = false;
+                        let currentX, currentY;
+
+                        newBirdInstance.addEventListener('mousedown', (e) => {
+                            if (currentMode === 'dj') {
+                                isDragging = true;
+                                newBirdInstance.style.cursor = 'grabbing';
+                                currentX = e.clientX - newBirdInstance.getBoundingClientRect().left;
+                                currentY = e.clientY - newBirdInstance.getBoundingClientRect().top;
+                            }
+                        });
+
+                        newBirdInstance.addEventListener('mousemove', (e) => {
+                            if (isDragging && currentMode === 'dj') {
+                                const newX = e.clientX - containerRect.left - currentX;
+                                const newY = e.clientY - containerRect.top - currentY;
+                                newBirdInstance.style.left = `${newX}px`;
+                                newBirdInstance.style.top = `${newY}px`;
+                            }
+                        });
+
+                        newBirdInstance.addEventListener('mouseup', () => {
+                            isDragging = false;
+                            newBirdInstance.style.cursor = 'grab';
+                        });
+
+                         // Handle touch events for dragging on mobile
+                        newBirdInstance.addEventListener('touchstart', (e) => {
+                            if (currentMode === 'dj') {
+                                isDragging = true;
+                                const touch = e.touches[0];
+                                currentX = touch.clientX - newBirdInstance.getBoundingClientRect().left;
+                                currentY = touch.clientY - newBirdInstance.getBoundingClientRect().top;
+                                e.preventDefault(); // Prevent scrolling
+                            }
+                        });
+
+                        newBirdInstance.addEventListener('touchmove', (e) => {
+                            if (isDragging && currentMode === 'dj') {
+                                const touch = e.touches[0];
+                                const newX = touch.clientX - containerRect.left - currentX;
+                                const newY = touch.clientY - containerRect.top - currentY;
+                                newBirdInstance.style.left = `${newX}px`;
+                                newBirdInstance.style.top = `${newY}px`;
+                                e.preventDefault(); // Prevent scrolling
+                            }
+                        });
+
+                        newBirdInstance.addEventListener('touchend', () => {
+                            isDragging = false;
+                        });
+
+
+                        // Play and loop sound for dragged bird
+                        if (Tone.context.state !== 'running') {
+                            await Tone.start();
+                        }
+                        const player = birdPlayers[birdData.name];
+                        if (player) {
+                            player.loop = true; // Ensure looping is set
+                            player.start();
+                            // Store the player instance with the image element to stop it later if needed
+                            newBirdInstance.dataset.player = birdData.name;
+                        }
+
+                        // Remove bird on double click / double tap
+                        newBirdInstance.addEventListener('dblclick', () => {
+                            if (currentMode === 'dj') {
+                                const playerToRemove = birdPlayers[newBirdInstance.dataset.player];
+                                if (playerToRemove && playerToRemove.state === 'started') {
+                                    playerToRemove.stop();
+                                }
+                                newBirdInstance.remove();
+                            }
+                        });
+
+                        newBirdInstance.addEventListener('touchend', (e) => {
+                            // Detect double tap for removal
+                            const now = new Date().getTime();
+                            const lastTouch = newBirdInstance.dataset.lastTouch || 0;
+                            const delta = now - lastTouch;
+                            if (delta < 300 && delta > 0 && currentMode === 'dj') { // 300ms for double tap
+                                const playerToRemove = birdPlayers[newBirdInstance.dataset.player];
+                                if (playerToRemove && playerToRemove.state === 'started') {
+                                    playerToRemove.stop();
+                                }
+                                newBirdInstance.remove();
+                            }
+                            newBirdInstance.dataset.lastTouch = now;
+                            isDragging = false; // Reset dragging state on touchend
+                        });
+                    }
+                    draggedBird = null; // Reset dragged bird
+                }
+            });
+
+            // Mode switching logic
+            function setMode(mode) {
+                currentMode = mode;
+                if (currentMode === 'id') {
+                    idModeBtn.classList.remove('bg-gray-300', 'text-gray-800');
+                    idModeBtn.classList.add('bg-blue-500', 'text-white');
+                    djModeBtn.classList.remove('bg-blue-500', 'text-white');
+                    djModeBtn.classList.add('bg-gray-300', 'text-gray-800');
+
+                    // Clear any dragged birds and stop their sounds
+                    document.querySelectorAll('.draggable-bird').forEach(bird => {
+                        const playerToStop = birdPlayers[bird.dataset.player];
+                        if (playerToStop && playerToStop.state === 'started') {
+                            playerToStop.stop();
+                        }
+                        bird.remove();
+                    });
+
+                    // Start ID mode pop-ups
+                    if (!spawnIntervalId) {
+                        spawnIntervalId = setInterval(spawnRandomBird, 3000);
+                    }
+                } else { // DJ Mode
+                    djModeBtn.classList.remove('bg-gray-300', 'text-gray-800');
+                    djModeBtn.classList.add('bg-blue-500', 'text-white');
+                    idModeBtn.classList.remove('bg-blue-500', 'text-white');
+                    idModeBtn.classList.add('bg-gray-300', 'text-gray-800');
+
+                    // Stop ID mode pop-ups
+                    if (spawnIntervalId) {
+                        clearInterval(spawnIntervalId);
+                        spawnIntervalId = null;
+                    }
+                    // Clear all existing pop-up birds
+                    document.querySelectorAll('.bird-popup').forEach(bird => bird.remove());
+                }
+            }
+
+            idModeBtn.addEventListener('click', () => setMode('id'));
+            djModeBtn.addEventListener('click', () => setMode('dj'));
+
+            // Initialize the app
+            startCamera(); // Start camera as soon as possible
+            populateBirdGallery(); // Populate the gallery
+            setMode('id'); // Start in ID mode by default
+        });
+    </script>
+</body>
+</html>
