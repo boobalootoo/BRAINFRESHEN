@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painter's Palette Overlay</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Inter', sans-serif;
+            color: #fff;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        video, #drawCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: 1; /* Ensure video is behind canvas */
+        }
+
+        #drawCanvas {
+            touch-action: none;
+            z-index: 2; /* Drawing canvas on top of video */
+        }
+
+        #paletteContainer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0); /* Hidden and scaled down initially */
+            transform-origin: center;
+            transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+            opacity: 0;
+            z-index: 10;
+            width: 80vmin; /* Responsive width based on viewport */
+            height: 80vmin; /* Responsive height based on viewport */
+            max-width: 600px; /* Max size for larger screens */
+            max-height: 600px;
+        }
+
+        #paletteContainer.visible {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+
+        #paletteCanvas {
+            width: 100%; /* Fill parent container */
+            height: 100%; /* Fill parent container */
+            border-radius: 50%;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.6);
+            cursor: pointer;
+            background: linear-gradient(135deg, #8B4513 0%, #A0522D 25%, #8B4513 50%, #A0522D 75%, #8B4513 100%); /* Wood texture */
+            border: 5px solid rgba(0, 0, 0, 0.3);
+            box-sizing: border-box;
+        }
+
+        .color-blob-button {
+            position: absolute;
+            width: 10%; /* Responsive size */
+            height: 10%; /* Responsive size */
+            border-radius: 50%;
+            border: 3px solid rgba(0, 0, 0, 0.4);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            transition: transform 0.1s ease-in-out, border-color 0.2s;
+            z-index: 11; /* On top of palette canvas */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0; /* Hide text if any */
+        }
+
+        .color-blob-button.selected {
+            border-color: #fff; /* Highlight selected color */
+            transform: scale(1.1);
+        }
+
+        .color-blob-button:active {
+            transform: scale(0.95);
+        }
+
+        /* Positions for the fixed color blobs (percentages relative to paletteContainer) */
+        /* Adjusted positions to be more inside the palette */
+        #redBlob { top: 10%; left: 15%; background-color: red; }
+        #yellowBlob { top: 30%; left: 5%; background-color: yellow; }
+        #blueBlob { top: 50%; left: 15%; background-color: blue; }
+        #whiteBlob { top: 70%; left: 5%; background-color: white; }
+        #blackBlob { top: 90%; left: 15%; background-color: black; }
+
+
+        #tools {
+            position: absolute;
+            top: 80px; /* Adjusted position below the main toggle button */
+            left: 20px;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            opacity: 0; /* Hidden by default */
+            pointer-events: none; /* Disable interaction when hidden */
+        }
+
+        #tools.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        button {
+            background: linear-gradient(145deg, #4CAF50, #45a049);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        button:hover {
+            background: linear-gradient(145deg, #45a049, #4CAF50);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Icon buttons specific styling */
+        .icon-button {
+            background: linear-gradient(145deg, #007bff, #0056b3);
+            padding: 10px;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .icon-button:hover {
+            background: linear-gradient(145deg, #0056b3, #007bff);
+        }
+
+        .icon-button img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Ensure image fits within button */
+        }
+
+        /* Main toggle button always visible */
+        #mainToggleBtn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 25; /* Ensure it's on top of everything */
+            /* Inherits .icon-button styles */
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="drawCanvas"></canvas>
+
+        <div id="paletteContainer">
+            <canvas id="paletteCanvas"></canvas>
+            <!-- Fixed color blobs -->
+            <div id="redBlob" class="color-blob-button" data-color="255,0,0"></div>
+            <div id="yellowBlob" class="color-blob-button" data-color="255,255,0"></div>
+            <div id="blueBlob" class="color-blob-button" data-color="0,0,255"></div>
+            <div id="whiteBlob" class="color-blob-button" data-color="255,255,255"></div>
+            <div id="blackBlob" class="color-blob-button" data-color="0,0,0"></div>
+        </div>
+
+        <div id="tools">
+            <button class="icon-button" onclick="selectEraser()">
+                <img src="sponge.png" alt="Sponge">
+            </button>
+            <button class="icon-button" onclick="saveAllDrawings()">
+                <img src="frame.png" alt="Save">
+            </button>
+        </div>
+
+        <!-- Main toggle button, always visible -->
+        <button id="mainToggleBtn" class="icon-button" onclick="togglePaletteAndTools()">
+            <img src="palette.png" alt="Palette">
+        </button>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const drawCanvas = document.getElementById('drawCanvas');
+        const drawCtx = drawCanvas.getContext('2d');
+        const paletteContainer = document.getElementById('paletteContainer');
+        const paletteCanvas = document.getElementById('paletteCanvas');
+        const paletteCtx = paletteCanvas.getContext('2d');
+        const tools = document.getElementById('tools');
+        const colorBlobButtons = document.querySelectorAll('.color-blob-button');
+
+        let currentPenColor = [0, 0, 0]; // The color the pen will draw with
+        let selectedColorForMixing = null; // The color currently selected from a fixed blob
+        let isErasing = false;
+        let drawingOnMainCanvas = false;
+        let mixingOnPalette = false; // Flag for mixing on the palette
+
+        let lastPaletteX = 0;
+        let lastPaletteY = 0;
+
+        // --- Utility Functions ---
+
+        // Resize drawing canvas
+        function resizeDrawCanvas() {
+            drawCanvas.width = window.innerWidth;
+            drawCanvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeDrawCanvas);
+        resizeDrawCanvas();
+
+        // Initialize palette canvas
+        function initPaletteCanvas() {
+            paletteCanvas.width = paletteCanvas.offsetWidth;
+            paletteCanvas.height = paletteCanvas.offsetHeight;
+            // Clear any previous paint dots when palette is re-initialized/resized
+            paletteCtx.clearRect(0, 0, paletteCanvas.width, paletteCanvas.height);
+        }
+        window.addEventListener('load', initPaletteCanvas);
+        window.addEventListener('resize', initPaletteCanvas);
+
+        // --- Camera Access ---
+        navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }, audio: false
+        }).then(stream => {
+            video.srcObject = stream;
+        }).catch(err => {
+            console.error("Camera error: " + err.message);
+        });
+
+        // --- Drawing Logic (Main Canvas) ---
+        function getPos(e) {
+            if (e.touches) return [e.touches[0].clientX, e.touches[0].clientY];
+            return [e.clientX, e.clientY];
+        }
+
+        function startDraw(e) {
+            // Prevent drawing if interacting with palette or tools
+            if (e.target.closest('#paletteContainer') || e.target.closest('#tools') || e.target.id === 'mainToggleBtn') {
+                return;
+            }
+            drawingOnMainCanvas = true;
+            const [x, y] = getPos(e);
+            drawCtx.beginPath();
+            drawCtx.moveTo(x, y);
+        }
+
+        function draw(e) {
+            if (!drawingOnMainCanvas) return;
+            const [x, y] = getPos(e);
+            drawCtx.lineTo(x, y);
+            drawCtx.lineCap = 'round';
+            drawCtx.lineWidth = isErasing ? 30 : 10;
+            drawCtx.strokeStyle = isErasing ? 'rgba(0,0,0,1)' : `rgb(${currentPenColor.join(",")})`;
+            drawCtx.globalCompositeOperation = isErasing ? 'destination-out' : 'source-over';
+            drawCtx.stroke();
+        }
+
+        function endDraw() {
+            drawingOnMainCanvas = false;
+        }
+
+        drawCanvas.addEventListener('mousedown', startDraw);
+        drawCanvas.addEventListener('mousemove', draw);
+        drawCanvas.addEventListener('mouseup', endDraw);
+
+        drawCanvas.addEventListener('touchstart', startDraw, { passive: false });
+        drawCanvas.addEventListener('touchmove', draw, { passive: false });
+        drawCanvas.addEventListener('touchend', endDraw);
+
+        // --- Color Mixing Logic (Palette Canvas) ---
+
+        // Function to get mouse/touch position relative to palette canvas
+        function getPaletteCanvasPos(e) {
+            const rect = paletteCanvas.getBoundingClientRect();
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function isPointInCircle(x, y, centerX, centerY, radius) {
+            return (x - centerX) * (x - centerX) + (y - centerY) * (y - centerY) < radius * radius;
+        }
+
+        function startMixing(e) {
+            const pos = getPaletteCanvasPos(e);
+            const paletteCenterX = paletteCanvas.width / 2;
+            const paletteCenterY = paletteCanvas.height / 2;
+            const paletteRadius = paletteCanvas.width / 2;
+
+            // Check if click is within the circular palette area
+            if (!isPointInCircle(pos.x, pos.y, paletteCenterX, paletteCenterY, paletteRadius)) {
+                return;
+            }
+
+            mixingOnPalette = true;
+            lastPaletteX = pos.x;
+            lastPaletteY = pos.y;
+
+            if (selectedColorForMixing) {
+                // Draw a new dot with the selected color
+                drawColorDotOnPalette(selectedColorForMixing, pos.x, pos.y);
+                // After placing the dot, the pen color should be the result of the mix at that point
+                currentPenColor = getMixedColorAtPoint(pos.x, pos.y);
+                selectedColorForMixing = null; // Reset selected color after placing dot
+                colorBlobButtons.forEach(btn => btn.classList.remove('selected')); // Deselect blob
+            } else {
+                // If no color selected, pick color from where clicked on palette for smearing
+                const mixedColor = getMixedColorAtPoint(pos.x, pos.y);
+                if (mixedColor) {
+                    currentPenColor = mixedColor;
+                    isErasing = false; // Selecting a mixed color means not erasing
+                }
+            }
+        }
+
+        function mixColors(e) {
+            if (!mixingOnPalette) return;
+
+            const pos = getPaletteCanvasPos(e);
+            const paletteCenterX = paletteCanvas.width / 2;
+            const paletteCenterY = paletteCanvas.height / 2;
+            const paletteRadius = paletteCanvas.width / 2;
+
+            // Only mix if within the circular palette area
+            if (!isPointInCircle(pos.x, pos.y, paletteCenterX, paletteCenterY, paletteRadius)) {
+                return;
+            }
+
+            // Draw a line to simulate smearing
+            paletteCtx.globalCompositeOperation = 'source-over'; // Default for smearing
+            paletteCtx.lineCap = 'round';
+            paletteCtx.lineWidth = 30; // Smear width
+            paletteCtx.strokeStyle = `rgba(${currentPenColor.join(",")}, 0.5)`; // Use current pen color for smearing with transparency
+
+            paletteCtx.beginPath();
+            paletteCtx.moveTo(lastPaletteX, lastPaletteY);
+            paletteCtx.lineTo(pos.x, pos.y);
+            paletteCtx.stroke();
+
+            // Update current pen color based on the smeared area
+            const smearedColor = getMixedColorAtPoint(pos.x, pos.y);
+            if (smearedColor) {
+                currentPenColor = smearedColor;
+            }
+
+            lastPaletteX = pos.x;
+            lastPaletteY = pos.y;
+        }
+
+        function endMixing() {
+            mixingOnPalette = false;
+        }
+
+        paletteCanvas.addEventListener('mousedown', startMixing);
+        paletteCanvas.addEventListener('mousemove', mixColors);
+        paletteCanvas.addEventListener('mouseup', endMixing);
+        paletteCanvas.addEventListener('mouseout', endMixing); // End mixing if mouse leaves canvas
+
+        paletteCanvas.addEventListener('touchstart', startMixing, { passive: false });
+        paletteCanvas.addEventListener('touchmove', mixColors, { passive: false });
+        paletteCanvas.addEventListener('touchend', endMixing);
+        paletteCanvas.addEventListener('touchcancel', endMixing);
+
+        // Function to get the mixed color at a specific point on the palette canvas
+        function getMixedColorAtPoint(x, y) {
+            const imageData = paletteCtx.getImageData(x, y, 1, 1).data;
+            // Only return color if the pixel is not fully transparent (i.e., paint exists there)
+            if (imageData[3] > 0) {
+                return [imageData[0], imageData[1], imageData[2]];
+            }
+            return null; // Return null if no paint at this point
+        }
+
+        function drawColorDotOnPalette(color, x, y) {
+            // Use 'source-over' for initial dots to correctly layer and blend
+            // Draw with a slight transparency to allow underlying colors to show through for mixing effect
+            paletteCtx.globalCompositeOperation = 'source-over';
+            paletteCtx.fillStyle = `rgba(${color.join(',')}, 0.7)`; // Reduced opacity for better blending
+            paletteCtx.beginPath();
+            paletteCtx.arc(x, y, 25, 0, Math.PI * 2); // Dot size
+            paletteCtx.fill();
+        }
+
+        // --- Color Blob Button Handlers ---
+        colorBlobButtons.forEach(blob => {
+            blob.addEventListener('click', () => {
+                // Deselect all other blobs
+                colorBlobButtons.forEach(btn => btn.classList.remove('selected'));
+                // Select this blob
+                blob.classList.add('selected');
+
+                const rgb = blob.dataset.color.split(',').map(Number);
+                selectedColorForMixing = rgb; // Set the color to be placed on palette
+                currentPenColor = rgb; // Also set as the immediate pen color for drawing on main canvas
+                isErasing = false; // Selecting a color means not erasing
+                console.log(`Selected: rgb(${rgb.join(',')}). Tap on palette to place dot, or drag to mix.`);
+            });
+        });
+
+        // --- Tools ---
+        function selectEraser() {
+            isErasing = true;
+            currentPenColor = [0, 0, 0]; // Eraser effectively uses black with destination-out
+            colorBlobButtons.forEach(btn => btn.classList.remove('selected')); // Deselect any selected color
+            console.log("Sponge selected. Tap on canvas to erase.");
+        }
+
+        // --- Save Functions ---
+        function downloadImage(dataURL, filename) {
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = dataURL;
+            document.body.appendChild(link); // Required for Firefox
+            link.click();
+            document.body.removeChild(link); // Clean up
+        }
+
+        function saveDrawingBlankBackground() {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = drawCanvas.width;
+            tempCanvas.height = drawCanvas.height;
+
+            // Fill with white background
+            tempCtx.fillStyle = 'white';
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+            // Draw the current drawing on top
+            tempCtx.drawImage(drawCanvas, 0, 0);
+
+            downloadImage(tempCanvas.toDataURL('image/png'), 'my-ar-drawing-blank.png');
+        }
+
+        function saveDrawingTransparentBackground() {
+            // The drawCanvas itself is transparent by default
+            downloadImage(drawCanvas.toDataURL('image/png'), 'my-ar-drawing-transparent.png');
+        }
+
+        function saveDrawingWithCameraImage() {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = drawCanvas.width;
+            tempCanvas.height = drawCanvas.height;
+
+            // Draw the current video frame first
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+            } else {
+                // Fallback if video isn't ready
+                tempCtx.fillStyle = 'black';
+                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            }
+
+            // Draw the current drawing on top
+            tempCtx.drawImage(drawCanvas, 0, 0);
+
+            downloadImage(tempCanvas.toDataURL('image/png'), 'my-ar-drawing-camera.png');
+        }
+
+        function saveAllDrawings() {
+            saveDrawingBlankBackground();
+            saveDrawingTransparentBackground();
+            saveDrawingWithCameraImage();
+            console.log("All three drawing versions saved!");
+        }
+
+        // --- Toggle Palette and Tools ---
+        let isPaletteAndToolsVisible = false;
+
+        function togglePaletteAndTools() {
+            isPaletteAndToolsVisible = !isPaletteAndToolsVisible;
+            if (isPaletteAndToolsVisible) {
+                paletteContainer.classList.add('visible');
+                tools.classList.add('visible');
+            } else {
+                paletteContainer.classList.remove('visible');
+                tools.classList.remove('visible');
+            }
+        }
+
+        // Initialize state on load: only toggle button visible
+        window.addEventListener('load', () => {
+            // The palette and tools are hidden by default via CSS and JS initialization
+            // The mainToggleBtn is always visible
+        });
+    </script>
+</body>
+</html>
