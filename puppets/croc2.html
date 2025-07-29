@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Optimized Crocodile Puppet</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<video id="video" autoplay playsinline style="display:none;"></video>
+<script type="module">
+  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+  import { HandLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3';
+
+  const video = document.getElementById('video');
+  navigator.mediaDevices.getUserMedia({ video: true }).then(s => video.srcObject = s);
+  await new Promise(r => video.onloadedmetadata = r);
+
+  const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm');
+  const handLandmarker = await HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: 'https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task'
+    },
+    runningMode: 'VIDEO',
+    numHands: 1
+  });
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+  camera.position.z = 2;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = false;        // Disable shadows for perf
+  renderer.setPixelRatio(window.devicePixelRatio * 0.7); // Lower resolution for perf
+  document.body.appendChild(renderer.domElement);
+
+  const light = new THREE.PointLight(0xffffff, 1);
+  light.position.set(0, 1, 2);
+  scene.add(light);
+
+  const green = new THREE.MeshStandardMaterial({ color: 0x228b22 });
+
+  // Simplified jaws only
+  const topJaw = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.1), green);
+  const bottomJaw = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.1), green);
+  scene.add(topJaw, bottomJaw);
+
+  const toVec3 = (lm) => new THREE.Vector3((lm.x - 0.5) * 2, -(lm.y - 0.5) * 2, -lm.z * 0.5);
+
+  let lastPinch = false;
+  let lastDetectionTime = 0;
+  const detectionInterval = 100; // ms
+
+  function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+
+    const now = performance.now();
+    let results = { landmarks: [] };
+
+    if (now - lastDetectionTime > detectionInterval) {
+      results = handLandmarker.detectForVideo(video, now);
+      lastDetectionTime = now;
+    }
+
+    if (results.landmarks.length > 0) {
+      const lm = results.landmarks[0];
+      const wrist = toVec3(lm[0]);
+      const index = toVec3(lm[8]);
+      const thumb = toVec3(lm[4]);
+
+      topJaw.position.copy(index);
+      bottomJaw.position.copy(thumb);
+
+      const isFacingCamera = Math.abs(lm[4].z) < 0.1 && Math.abs(lm[8].z) < 0.1;
+      const targetForward = new THREE.Vector3(0, 0, 1);
+
+      topJaw.lookAt(wrist);
+      const wristQuatTop = new THREE.Quaternion().copy(topJaw.quaternion);
+      topJaw.lookAt(targetForward);
+      const forwardQuatTop = new THREE.Quaternion().copy(topJaw.quaternion);
+
+      bottomJaw.lookAt(wrist);
+      const wristQuatBot = new THREE.Quaternion().copy(bottomJaw.quaternion);
+      bottomJaw.lookAt(targetForward);
+      const forwardQuatBot = new THREE.Quaternion().copy(bottomJaw.quaternion);
+
+      topJaw.position.copy(index);
+      bottomJaw.position.copy(thumb);
+
+      topJaw.quaternion.slerp(isFacingCamera ? forwardQuatTop : wristQuatTop, 0.1);
+      bottomJaw.quaternion.slerp(isFacingCamera ? forwardQuatBot : wristQuatBot, 0.1);
+
+      const pinch = index.distanceTo(thumb) < 0.1;
+      if (pinch && !lastPinch) {
+        bottomJaw.rotation.x += 0.3;
+        setTimeout(() => bottomJaw.rotation.x -= 0.3, 150);
+      }
+      lastPinch = pinch;
+    }
+  }
+
+  animate();
+
+  // Handle resize
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
+</body>
+</html>
