@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crocodile Hand Overlay</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0; /* Remove padding for full page effect */
+            box-sizing: border-box;
+            color: #333;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        /* Container for the full-page video and canvas overlay */
+        .app-container {
+            position: relative;
+            width: 100vw; /* Full viewport width */
+            height: 100vh; /* Full viewport height */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000; /* Black background behind video */
+        }
+        video, canvas {
+            position: absolute; /* Position canvas over video */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Make video fill the container, cropping if necessary */
+            border-radius: 0; /* No rounded corners for full page */
+            transform: scaleX(-1); /* Mirror the video and canvas for natural hand movement */
+        }
+        .message-box {
+            background-color: #fff3cd;
+            color: #664d03;
+            border: 1px solid #ffecb5;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: center;
+            font-size: 0.9em;
+            position: absolute; /* Position message box on top of everything */
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20; /* Ensure it's above video/canvas */
+            max-width: 90%;
+            width: 400px; /* Max width for readability */
+            box-sizing: border-box;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin-top: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Styling for loading and instructions messages */
+        #loadingMessage, #instructions {
+            position: absolute;
+            z-index: 10; /* Ensure messages are on top of video/canvas */
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.5); /* Add shadow for readability */
+            background-color: rgba(0,0,0,0.5); /* Semi-transparent background */
+            padding: 15px 25px;
+            border-radius: 10px;
+            text-align: center;
+            color: white; /* Ensure text is white for contrast */
+        }
+    </style>
+    <!-- MediaPipe Hands and TensorFlow.js for hand tracking -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.13.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Video element to display camera feed -->
+        <video id="video" autoplay playsinline></video>
+        <!-- Canvas element to draw the crocodile overlay -->
+        <canvas id="crocodileCanvas"></canvas>
+
+        <!-- Loading message displayed while camera and model load -->
+        <div id="loadingMessage" class="absolute text-white text-lg flex flex-col items-center">
+            <div class="loading-spinner"></div>
+            <p class="mt-2">Loading camera and model...</p>
+        </div>
+
+        <!-- Instructions displayed once the app is ready -->
+        <div id="instructions" class="absolute text-white text-lg p-4 bg-black bg-opacity-50 rounded-lg hidden">
+            <p>Show your hand side-on to the camera!</p>
+            <p>Move your index finger up/down to control the top jaw.</p>
+            <p>Move your thumb up/down to control the bottom jaw.</p>
+        </div>
+    </div>
+    <!-- Message box for user notifications (e.g., camera access errors) -->
+    <div id="messageBox" class="message-box hidden"></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('crocodileCanvas');
+        const ctx = canvas.getContext('2d');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const instructions = document.getElementById('instructions');
+        const messageBox = document.getElementById('messageBox');
+
+        let hands;
+        let animationFrameId;
+        let videoWidth, videoHeight;
+
+        // Function to display messages to the user (e.g., errors, instructions)
+        function showMessage(message, type = 'info') {
+            messageBox.textContent = message;
+            messageBox.className = `message-box ${type === 'error' ? 'bg-red-100 text-red-700 border-red-400' : 'bg-yellow-100 text-yellow-700 border-yellow-400'}`;
+            messageBox.classList.remove('hidden');
+        }
+
+        // Function to hide the message box
+        function hideMessage() {
+            messageBox.classList.add('hidden');
+        }
+
+        // Function to set canvas dimensions based on video stream's intrinsic size
+        function setCanvasDimensions() {
+            // Set canvas drawing buffer size to match video's native resolution
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+        }
+
+        // Function to try accessing camera with different facing modes for better compatibility
+        async function getCameraStream() {
+            const constraintsOptions = [
+                { video: { facingMode: { exact: 'environment' } } }, // Prefer back camera, exact match
+                { video: { facingMode: 'environment' } },             // Back camera, less strict
+                { video: { facingMode: 'user' } },                    // Front camera
+                { video: true }                                       // Any available camera
+            ];
+
+            for (const constraints of constraintsOptions) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    return stream;
+                } catch (error) {
+                    console.warn(`Attempt to get camera with constraints ${JSON.stringify(constraints)} failed:`, error);
+                }
+            }
+            throw new Error('No compatible camera stream found.'); // If all attempts fail
+        }
+
+        // Initialize MediaPipe Hands model and start camera stream
+        async function initializeHands() {
+            hands = new Hands({
+                locateFile: (file) => {
+                    // Path to MediaPipe assets
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
+                }
+            });
+
+            // Configure MediaPipe Hands options
+            hands.setOptions({
+                maxNumHands: 1, // Only detect one hand for the crocodile
+                modelComplexity: 1, // Model complexity: 0, 1, or 2. 1 is a good balance for performance.
+                minDetectionConfidence: 0.7, // Minimum confidence for hand detection
+                minTrackingConfidence: 0.7 // Minimum confidence for hand tracking
+            });
+
+            // Set callback for when MediaPipe processes results
+            hands.onResults(onResults);
+
+            // Attempt to start camera stream
+            try {
+                const stream = await getCameraStream(); // Use the helper function to get camera stream
+                video.srcObject = stream;
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        resolve(video);
+                    };
+                });
+                video.play();
+                setCanvasDimensions(); // Set canvas dimensions once video metadata is loaded
+
+                // Hide loading message and show instructions
+                loadingMessage.classList.add('hidden');
+                instructions.classList.remove('hidden');
+                hideMessage(); // Hide any previous error messages
+
+                // Start sending video frames to MediaPipe for processing
+                sendToHands();
+
+            } catch (error) {
+                console.error('Final error accessing camera:', error);
+                loadingMessage.classList.add('hidden');
+                // Display user-friendly error message
+                showMessage('Failed to access camera. Please ensure camera permissions are granted and try again. Your device might not have a compatible camera or it\'s in use by another application.', 'error');
+            }
+        }
+
+        // Continuously send video frames to MediaPipe for hand detection
+        async function sendToHands() {
+            if (!video.srcObject) {
+                console.warn('Video stream not available. Cannot send to Hands.');
+                return;
+            }
+            await hands.send({ image: video });
+            animationFrameId = requestAnimationFrame(sendToHands); // Request next animation frame
+        }
+
+        // Helper function to draw a rounded rectangle
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+
+        // Helper function to calculate Euclidean distance between two landmarks
+        function getDistance(p1, p2, canvasWidth, canvasHeight) {
+            return Math.sqrt(
+                Math.pow((p1.x - p2.x) * canvasWidth, 2) +
+                Math.pow((p1.y - p2.y) * canvasHeight, 2)
+            );
+        }
+
+        // Draw the crocodile on the canvas based on hand landmarks
+        function drawCrocodile(landmarks) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas for new drawing
+
+            if (!landmarks || landmarks.length === 0) {
+                return; // No hand detected, so no crocodile to draw
+            }
+
+            // Get key landmarks for hand positioning and jaw control
+            const wrist = landmarks[0];
+            const indexMcp = landmarks[5]; // Index finger metacarpophalangeal joint (base)
+            const indexTip = landmarks[8]; // Index finger tip
+            const thumbCmC = landmarks[2]; // Thumb carpometacarpal joint (base)
+            const thumbTip = landmarks[4]; // Thumb tip
+            const middleFingerMcp = landmarks[9]; // Metacarpophalangeal joint of middle finger
+
+            // Define crocodile colors
+            const crocodileColor = '#228B22'; // Forest Green
+            const outlineColor = '#006400'; // Dark Green
+            const eyeColor = '#FFFFFF';
+            const pupilColor = '#000000';
+            const teethColor = '#FFFFFF';
+
+            // Calculate a scale factor based on the hand size
+            const handLengthForScale = getDistance(wrist, middleFingerMcp, canvas.width, canvas.height);
+            const scaleFactor = handLengthForScale / 150; // Adjust this divisor to make the crocodile larger/smaller
+
+            // Calculate the anchor point for the crocodile (a point near the center of the palm)
+            const palmX = (wrist.x + indexMcp.x + landmarks[17].x) / 3 * canvas.width;
+            const palmY = (wrist.y + indexMcp.y + landmarks[17].y) / 3 * canvas.height;
+
+            // Calculate the rotation of the hand (and thus the crocodile)
+            const handAngleRad = Math.atan2(middleFingerMcp.y - wrist.y, middleFingerMcp.x - wrist.x);
+
+            // Save the current canvas context state (transformations)
+            ctx.save();
+            // Translate context to the anchor point (center of palm)
+            ctx.translate(palmX, palmY);
+            // Rotate the context to align with the hand's orientation
+            // Add PI/2 (90 degrees) to make the crocodile point 'upwards' relative to the hand's natural orientation
+            ctx.rotate(handAngleRad + Math.PI / 2);
+
+            // --- Calculate relative positions of finger tips in crocodile's local space ---
+            const cosInvAngle = Math.cos(-(handAngleRad + Math.PI / 2));
+            const sinInvAngle = Math.sin(-(handAngleRad + Math.PI / 2));
+
+            // Function to get rotated Y coordinate of a landmark relative to palmX, palmY
+            const getRotatedY = (landmark) => {
+                const lx = (landmark.x * canvas.width) - palmX;
+                const ly = (landmark.y * canvas.height) - palmY;
+                return -lx * sinInvAngle + ly * cosInvAngle;
+            };
+
+            const rotated_indexTip_y = getRotatedY(indexTip);
+            const rotated_indexMcp_y = getRotatedY(indexMcp);
+            const rotated_thumbTip_y = getRotatedY(thumbTip);
+            const rotated_thumbCmC_y = getRotatedY(thumbCmC);
+
+            // --- Calculate Jaw Lengths based on Finger/Thumb Lengths ---
+            // Jaw lengths are the actual pixel length of the finger/thumb in the camera feed
+            const upperJawLength = getDistance(indexMcp, indexTip, canvas.width, canvas.height);
+            const lowerJawLength = getDistance(thumbCmC, thumbTip, canvas.width, canvas.height);
+
+            // --- Crocodile Jaw Dimensions (relative to scale factor) ---
+            const jawHeight = 40 * scaleFactor; // Fixed height for jaws
+            const jawRadius = 15 * scaleFactor;
+            const eyeRadius = 10 * scaleFactor;
+            const pupilRadius = 5 * scaleFactor;
+            const eyeOffsetX = 30 * scaleFactor; // Relative to jaw center
+            const eyeOffsetY = 10 * scaleFactor; // Relative to jaw top edge
+            const teethSize = 8 * scaleFactor;
+
+            // --- Jaw Control Parameters (Tune these values for desired feel) ---
+            // Y position of the crocodile's mouth hinge (relative to the transformed palm anchor at 0,0)
+            const crocHingeY = -50 * scaleFactor; // Adjust this to vertically position the jaws on the hand
+
+            // Y positions of index/thumb tips when jaws are considered "closed" in the crocodile's upright frame
+            // These are the Y values of the finger/thumb tips when the hand is in a "closed" position side-on.
+            const neutralIndexTipY = rotated_indexMcp_y - (jawHeight * 0.5); // Index tip slightly above its base
+            const neutralThumbTipY = rotated_thumbCmC_y + (jawHeight * 0.5); // Thumb tip slightly below its base
+
+            // Y positions of index/thumb tips when jaws are considered "fully open"
+            // These are the Y values of the finger/thumb tips when the hand is "open" side-on.
+            const openIndexTipY = rotated_indexMcp_y - (jawHeight * 2); // Index tip moved further up
+            const openThumbTipY = rotated_thumbCmC_y + (jawHeight * 2); // Thumb tip moved further down
+
+            // Calculate openness factors (0 to 1) for each jaw independently
+            let upperJawOffsetFactor = (neutralIndexTipY - rotated_indexTip_y) / (neutralIndexTipY - openIndexTipY);
+            upperJawOffsetFactor = Math.max(0, Math.min(1, upperJawOffsetFactor)); // Clamp between 0 and 1
+
+            let lowerJawOffsetFactor = (rotated_thumbTip_y - neutralThumbTipY) / (openThumbTipY - neutralThumbTipY);
+            lowerJawOffsetFactor = Math.max(0, Math.min(1, lowerJawOffsetFactor)); // Clamp between 0 and 1
+
+            // Calculate jaw positions based on factors
+            // Upper jaw moves upwards (Y becomes more negative)
+            const upperJawTopY = (crocHingeY - jawHeight) - (jawHeight * 1.5 * upperJawOffsetFactor);
+            // Lower jaw moves downwards (Y becomes more positive)
+            const lowerJawTopY = crocHingeY + (jawHeight * 1.5 * lowerJawOffsetFactor);
+
+            // --- Draw Crocodile Body (behind the jaws) ---
+            // Body width can be an average of jaw lengths or fixed
+            const bodyWidth = (upperJawLength + lowerJawLength) / 2 * 1.2;
+            const bodyHeight = jawHeight * 1.5;
+            const bodyX = -bodyWidth / 2;
+            const bodyY = crocHingeY - bodyHeight * 0.7 + (20 * scaleFactor); // Adjusted for better visual connection
+            ctx.fillStyle = crocodileColor;
+            ctx.strokeStyle = outlineColor;
+            ctx.lineWidth = 3 * scaleFactor;
+            roundRect(ctx, bodyX, bodyY, bodyWidth, bodyHeight, jawRadius);
+            ctx.fill();
+            ctx.stroke();
+
+            // --- Draw Upper Jaw ---
+            // X position adjusted to center the jaw based on its new dynamic length
+            const upperJawX = -upperJawLength / 2;
+            ctx.fillStyle = crocodileColor;
+            ctx.strokeStyle = outlineColor;
+            ctx.lineWidth = 3 * scaleFactor;
+            roundRect(ctx, upperJawX, upperJawTopY, upperJawLength, jawHeight, jawRadius);
+            ctx.fill();
+            ctx.stroke();
+
+            // --- Draw Lower Jaw ---
+            // X position adjusted to center the jaw based on its new dynamic length
+            const lowerJawX = -lowerJawLength / 2;
+            ctx.fillStyle = crocodileColor;
+            ctx.strokeStyle = outlineColor;
+            ctx.lineWidth = 3 * scaleFactor;
+            roundRect(ctx, lowerJawX, lowerJawTopY, lowerJawLength, jawHeight, jawRadius);
+            ctx.fill();
+            ctx.stroke();
+
+            // --- Draw Eyes on the Upper Jaw ---
+            ctx.fillStyle = eyeColor;
+            ctx.strokeStyle = pupilColor;
+            ctx.lineWidth = 2 * scaleFactor;
+
+            // Left Eye (relative to upper jaw's X and Y)
+            ctx.beginPath();
+            ctx.arc(upperJawX + eyeOffsetX, upperJawTopY + eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = pupilColor;
+            ctx.beginPath();
+            ctx.arc(upperJawX + eyeOffsetX, upperJawTopY + eyeOffsetY, pupilRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Right Eye (relative to upper jaw's X and Y)
+            ctx.fillStyle = eyeColor;
+            ctx.beginPath();
+            ctx.arc(upperJawX + upperJawLength - eyeOffsetX, upperJawTopY + eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = pupilColor;
+            ctx.beginPath();
+            ctx.arc(upperJawX + upperJawLength - eyeOffsetX, upperJawTopY + eyeOffsetY, pupilRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // --- Draw Teeth (simple triangles) ---
+            ctx.fillStyle = teethColor;
+            const numTeeth = 5;
+            const toothOffsetFromEdge = 2 * scaleFactor; // Small offset from the jaw edge
+
+            // Upper Jaw Teeth
+            const upperToothSpacing = upperJawLength / (numTeeth + 1);
+            for (let i = 0; i < numTeeth; i++) {
+                ctx.beginPath();
+                const toothX = upperJawX + upperToothSpacing * (i + 1);
+                const toothY = upperJawTopY + jawHeight - toothOffsetFromEdge; // Bottom edge of upper jaw
+                ctx.moveTo(toothX, toothY);
+                ctx.lineTo(toothX - teethSize / 2, toothY + teethSize);
+                ctx.lineTo(toothX + teethSize / 2, toothY + teethSize);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Lower Jaw Teeth
+            const lowerToothSpacing = lowerJawLength / (numTeeth + 1);
+            for (let i = 0; i < numTeeth; i++) {
+                ctx.beginPath();
+                const toothX = lowerJawX + lowerToothSpacing * (i + 1);
+                const toothY = lowerJawTopY + toothOffsetFromEdge; // Top edge of lower jaw
+                ctx.moveTo(toothX, toothY);
+                ctx.lineTo(toothX - teethSize / 2, toothY - teethSize);
+                ctx.lineTo(toothX + teethSize / 2, toothY - teethSize);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Restore the canvas context to its state before transformations
+            ctx.restore();
+        }
+
+        // MediaPipe results callback: this function is called when hand landmarks are detected
+        function onResults(results) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas for new drawing
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // Draw only the first detected hand as a crocodile
+                drawCrocodile(results.multiHandLandmarks[0]);
+            }
+        }
+
+        // Event listener for window load to ensure all DOM elements are ready before initialization
+        window.onload = initializeHands;
+
+        // Handle window resize to adjust canvas dimensions to match the video
+        window.addEventListener('resize', () => {
+            if (video.srcObject) {
+                setCanvasDimensions();
+            }
+        });
+
+        // Clean up resources (camera stream, animation frame) when the page is unloaded
+        window.onbeforeunload = () => {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+        };
+    </script>
+</body>
+</html>
