@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tree Leaf Cutout</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      position: absolute;
+      cursor: grab;
+    }
+  </style>
+</head>
+<body>
+<script>
+const trees = [
+  { name: 'alder', tree: 'alder.png', leaf: 'alderleaf.png' },
+  { name: 'ash', tree: 'ash.png', leaf: 'ashleaf.png' },
+  { name: 'birch', tree: 'birch.png', leaf: 'birchleaf.png' },
+  { name: 'chestnut', tree: 'chestnut.png', leaf: 'chestnutleaf.png' },
+  { name: 'oak', tree: 'oak.png', leaf: 'oakleaf.png' },
+  { name: 'pine', tree: 'pine.png', leaf: 'pineleaf.png' },
+  { name: 'willow', tree: 'willow.png', leaf: 'willowleaf.png' }
+];
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = e => reject(e);
+    img.src = src;
+  });
+}
+
+async function createMaskedTree(tree) {
+  const [treeImg, leafImg] = await Promise.all([
+    loadImage(tree.tree),
+    loadImage(tree.leaf)
+  ]);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = treeImg.width;
+  canvas.height = treeImg.height;
+  const ctx = canvas.getContext('2d');
+
+  // Draw tree image
+  ctx.drawImage(treeImg, 0, 0);
+
+  // Resize leaf to no more than 50% of tree dimensions
+  const maxLeafWidth = treeImg.width / 2;
+  const maxLeafHeight = treeImg.height / 2;
+
+  // Maintain leaf aspect ratio
+  const leafRatio = leafImg.width / leafImg.height;
+  let targetLeafWidth = maxLeafWidth;
+  let targetLeafHeight = targetLeafWidth / leafRatio;
+
+  if (targetLeafHeight > maxLeafHeight) {
+    targetLeafHeight = maxLeafHeight;
+    targetLeafWidth = targetLeafHeight * leafRatio;
+  }
+
+  const x = (treeImg.width - targetLeafWidth) / 2;
+  const y = (treeImg.height - targetLeafHeight) / 2;
+
+  // Apply cutout
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.drawImage(leafImg, x, y, targetLeafWidth, targetLeafHeight);
+  ctx.globalCompositeOperation = 'source-over';
+
+  canvas.style.left = `${Math.random() * (window.innerWidth - treeImg.width)}px`;
+  canvas.style.top = `${Math.random() * (window.innerHeight - treeImg.height)}px`;
+
+  enableDrag(canvas);
+  document.body.appendChild(canvas);
+}
+
+function enableDrag(el) {
+  let isDragging = false;
+  let offsetX, offsetY;
+
+  el.addEventListener('mousedown', e => {
+    isDragging = true;
+    offsetX = e.offsetX;
+    offsetY = e.offsetY;
+    el.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (isDragging) {
+      el.style.left = `${e.clientX - offsetX}px`;
+      el.style.top = `${e.clientY - offsetY}px`;
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+    el.style.cursor = 'grab';
+  });
+}
+
+(async () => {
+  for (const tree of trees) {
+    try {
+      await createMaskedTree(tree);
+    } catch (e) {
+      console.error('Error loading tree:', tree.name, e);
+    }
+  }
+})();
+</script>
+</body>
+</html>
