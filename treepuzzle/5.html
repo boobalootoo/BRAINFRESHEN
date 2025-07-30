@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tree Leaf Cutout</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+    }
+    .toolbar {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 8px;
+      border-radius: 8px;
+      z-index: 10;
+    }
+    .tree-icon {
+      width: 60px;
+      margin: 5px;
+      cursor: grab;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar" id="toolbar"></div>
+  <canvas id="treeCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('treeCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const treeNames = ['oak', 'pine', 'maple', 'ash', 'alder', 'birch', 'chestnut', 'willow'];
+    const treeImages = {};
+    const leafMasks = {};
+    const leafImages = {};
+    const placedTrees = [];
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+      });
+    }
+
+    async function preloadImages() {
+      for (const name of treeNames) {
+        try {
+          const [tree, leaf, leafMask] = await Promise.all([
+            loadImage(`${name}.png`),
+            loadImage(`${name}leaf.png`),
+            loadImage(`${name}leaf.png`) // same image used as mask
+          ]);
+          treeImages[name] = tree;
+          leafImages[name] = leaf;
+          leafMasks[name] = leafMask;
+        } catch (e) {
+          console.error(`Failed to load images for ${name}`, e);
+        }
+      }
+    }
+
+    function drawMaskedTree(treeName, x, y) {
+      const treeImage = treeImages[treeName];
+      const leafMask = leafMasks[treeName];
+      const leafImage = leafImages[treeName];
+
+      if (!treeImage || !leafMask || !leafImage) return;
+
+      const treeWidth = treeImage.width;
+      const treeHeight = treeImage.height;
+
+      const maskWidth = leafMask.width / 2;
+      const maskHeight = leafMask.height / 2;
+
+      const cutoutX = x + treeWidth / 2 - maskWidth / 2;
+      const cutoutY = y + treeHeight / 2 - maskHeight / 2;
+
+      // Draw tree
+      ctx.drawImage(treeImage, x, y);
+
+      // Cutout using destination-out
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(leafMask, cutoutX, cutoutY, maskWidth, maskHeight);
+      ctx.restore();
+
+      // Draw leaf into cutout
+      ctx.drawImage(leafImage, cutoutX, cutoutY, maskWidth, maskHeight);
+    }
+
+    function renderCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const t of placedTrees) {
+        drawMaskedTree(t.name, t.x, t.y);
+      }
+    }
+
+    function makeToolbar() {
+      const toolbar = document.getElementById('toolbar');
+      treeNames.forEach(name => {
+        const img = document.createElement('img');
+        img.src = `${name}.png`;
+        img.className = 'tree-icon';
+        img.draggable = true;
+        img.addEventListener('dragstart', e => {
+          e.dataTransfer.setData('tree', name);
+        });
+        toolbar.appendChild(img);
+      });
+    }
+
+    canvas.addEventListener('dragover', e => {
+      e.preventDefault();
+    });
+
+    canvas.addEventListener('drop', e => {
+      e.preventDefault();
+      const treeName = e.dataTransfer.getData('tree');
+      if (treeName) {
+        const x = e.clientX;
+        const y = e.clientY;
+        placedTrees.push({ name: treeName, x, y });
+        renderCanvas();
+      }
+    });
+
+    preloadImages().then(() => {
+      makeToolbar();
+    });
+  </script>
+</body>
+</html>
