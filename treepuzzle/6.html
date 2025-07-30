@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tree Leaf Puzzle</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #eef5e9;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const trees = [
+  'alder', 'ash', 'birch', 'chestnut',
+  'oak', 'pine', 'willow'
+];
+
+const images = {};
+let loaded = 0;
+const total = trees.length * 2;
+
+trees.forEach(name => {
+  images[name] = new Image();
+  images[name].src = `${name}.png`;
+  images[name].onload = checkLoaded;
+
+  images[`${name}leaf`] = new Image();
+  images[`${name}leaf`].src = `${name}leaf.png`;
+  images[`${name}leaf`].onload = checkLoaded;
+});
+
+function checkLoaded() {
+  loaded++;
+  if (loaded === total) init();
+}
+
+const treeSprites = [];
+const leafSprites = [];
+let dragging = null;
+let offsetX = 0;
+let offsetY = 0;
+let moved = false;
+
+function init() {
+  const spacingX = canvas.width / 4;
+  const spacingY = canvas.height / 2;
+  let index = 0;
+
+  trees.forEach(tree => {
+    const x = spacingX * (index % 4) + 100;
+    const y = spacingY * Math.floor(index / 4) + 100;
+
+    treeSprites.push({ name: tree, x, y, img: images[tree], leaf: images[`${tree}leaf`], width: 200, height: 200 });
+
+    // Place leaves randomly at bottom
+    const leafX = Math.random() * (canvas.width - 100);
+    const leafY = canvas.height - 120;
+    leafSprites.push({ name: tree, x: leafX, y: leafY, img: images[`${tree}leaf`], width: 80, height: 80 });
+
+    index++;
+  });
+
+  draw();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw tree images with cutouts
+  treeSprites.forEach(sprite => {
+    // Draw tree image
+    ctx.drawImage(sprite.img, sprite.x, sprite.y, sprite.width, sprite.height);
+
+    // Cutout: set globalCompositeOperation to 'destination-out'
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+
+    const cutoutW = sprite.width / 2;
+    const cutoutH = sprite.height / 2;
+    const cutoutX = sprite.x + sprite.width / 4;
+    const cutoutY = sprite.y + sprite.height / 4;
+
+    ctx.drawImage(sprite.leaf, cutoutX, cutoutY, cutoutW, cutoutH);
+    ctx.restore();
+  });
+
+  // Draw draggable leaves
+  leafSprites.forEach(leaf => {
+    ctx.drawImage(leaf.img, leaf.x, leaf.y, leaf.width, leaf.height);
+  });
+}
+
+// Click detection
+canvas.addEventListener('mousedown', (e) => {
+  const mouseX = e.clientX;
+  const mouseY = e.clientY;
+  moved = false;
+
+  // Check if clicking a leaf
+  for (let i = leafSprites.length - 1; i >= 0; i--) {
+    const leaf = leafSprites[i];
+    if (
+      mouseX >= leaf.x && mouseX <= leaf.x + leaf.width &&
+      mouseY >= leaf.y && mouseY <= leaf.y + leaf.height
+    ) {
+      dragging = leaf;
+      offsetX = mouseX - leaf.x;
+      offsetY = mouseY - leaf.y;
+      return;
+    }
+  }
+
+  // If not dragging, maybe clicked a tree
+  for (const tree of treeSprites) {
+    if (
+      mouseX >= tree.x && mouseX <= tree.x + tree.width &&
+      mouseY >= tree.y && mouseY <= tree.y + tree.height
+    ) {
+      // We'll decide whether to speak on mouseup
+      dragging = null;
+      draggingTree = tree;
+      offsetX = offsetY = 0;
+      return;
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (dragging) {
+    dragging.x = e.clientX - offsetX;
+    dragging.y = e.clientY - offsetY;
+    moved = true;
+    draw();
+  }
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  if (dragging) {
+    // Check for drop in correct tree cutout
+    const tree = treeSprites.find(t => t.name === dragging.name);
+    const cutoutX = tree.x + tree.width / 4;
+    const cutoutY = tree.y + tree.height / 4;
+    const cutoutW = tree.width / 2;
+    const cutoutH = tree.height / 2;
+
+    if (
+      dragging.x + dragging.width / 2 > cutoutX &&
+      dragging.x + dragging.width / 2 < cutoutX + cutoutW &&
+      dragging.y + dragging.height / 2 > cutoutY &&
+      dragging.y + dragging.height / 2 < cutoutY + cutoutH
+    ) {
+      // Snap to position
+      dragging.x = cutoutX + (cutoutW - dragging.width) / 2;
+      dragging.y = cutoutY + (cutoutH - dragging.height) / 2;
+    }
+
+    dragging = null;
+    draw();
+    return;
+  }
+
+  // Speak tree name if clicked and not dragged
+  if (!moved && draggingTree) {
+    const utterance = new SpeechSynthesisUtterance(draggingTree.name);
+    speechSynthesis.speak(utterance);
+  }
+  draggingTree = null;
+});
+
+</script>
+</body>
+</html>
