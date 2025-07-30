@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Leaf Cutout Masking</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #eef;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const treeNames = ['alder', 'ash', 'birch', 'chestnut', 'oak', 'pine', 'willow'];
+    const treeData = [];
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    async function setup() {
+      for (let i = 0; i < treeNames.length; i++) {
+        const name = treeNames[i];
+        const treeImg = await loadImage(`${name}.png`);
+        const leafImg = await loadImage(`${name}leaf.png`);
+        const x = (i % 4) * (canvas.width / 4) + canvas.width / 8;
+        const y = Math.floor(i / 4) * (canvas.height / 2) + canvas.height / 4;
+
+        // Create an offscreen canvas to hold the cutout
+        const buffer = document.createElement('canvas');
+        buffer.width = treeImg.width;
+        buffer.height = treeImg.height;
+        const bctx = buffer.getContext('2d');
+
+        // Draw the tree
+        bctx.drawImage(treeImg, 0, 0);
+
+        // Use compositing to cut out the leaf shape from the tree
+        bctx.globalCompositeOperation = 'destination-out';
+        bctx.drawImage(leafImg, (treeImg.width - leafImg.width) / 2, (treeImg.height - leafImg.height) / 2);
+
+        // Reset compositing
+        bctx.globalCompositeOperation = 'source-over';
+
+        treeData.push({
+          image: buffer,
+          x: x - treeImg.width / 2,
+          y: y - treeImg.height / 2,
+          width: treeImg.width,
+          height: treeImg.height,
+          dragging: false,
+          offsetX: 0,
+          offsetY: 0
+        });
+      }
+      draw();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const tree of treeData) {
+        ctx.drawImage(tree.image, tree.x, tree.y);
+      }
+    }
+
+    let currentTree = null;
+
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      for (let i = treeData.length - 1; i >= 0; i--) {
+        const t = treeData[i];
+        if (mx >= t.x && mx <= t.x + t.width && my >= t.y && my <= t.y + t.height) {
+          currentTree = t;
+          t.dragging = true;
+          t.offsetX = mx - t.x;
+          t.offsetY = my - t.y;
+          break;
+        }
+      }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (currentTree && currentTree.dragging) {
+        const rect = canvas.getBoundingClientRect();
+        currentTree.x = e.clientX - rect.left - currentTree.offsetX;
+        currentTree.y = e.clientY - rect.top - currentTree.offsetY;
+        draw();
+      }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      if (currentTree) {
+        currentTree.dragging = false;
+        currentTree = null;
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      draw();
+    });
+
+    setup().catch(console.error);
+  </script>
+</body>
+</html>
