@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Tree Leaf Match</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const treeData = [
+  { name: "oak", x: 100, y: 100 },
+  { name: "pine", x: 500, y: 100 },
+  { name: "birch", x: 900, y: 100 },
+  { name: "willow", x: 100, y: 400 },
+  { name: "chestnut", x: 500, y: 400 },
+  { name: "alder", x: 900, y: 400 },
+  { name: "ash", x: 100, y: 700 }
+];
+
+const leafStartX = 500;
+const leafStartY = 700;
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let treeImages = {};
+let leafImages = {};
+let masks = {};
+let draggableLeaves = [];
+let draggingLeaf = null;
+let offsetX = 0;
+let offsetY = 0;
+
+// Load all images
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function loadAssets() {
+  for (let tree of treeData) {
+    const treeImg = await loadImage(`${tree.name}.png`);
+    const leafImg = await loadImage(`${tree.name}leaf.png`);
+    treeImages[tree.name] = treeImg;
+    leafImages[tree.name] = leafImg;
+
+    // Create mask for this tree
+    const maskCanvas = document.createElement('canvas');
+    const size = 200;
+    maskCanvas.width = size;
+    maskCanvas.height = size;
+    const mctx = maskCanvas.getContext('2d');
+    
+    // draw the mask as transparent hole
+    mctx.clearRect(0, 0, size, size);
+    mctx.save();
+    mctx.globalCompositeOperation = "source-over";
+    mctx.fillStyle = "black";
+    mctx.fillRect(0, 0, size, size);
+    mctx.globalCompositeOperation = "destination-out";
+    mctx.drawImage(leafImg, 0, 0, size, size);
+    mctx.restore();
+
+    masks[tree.name] = maskCanvas;
+
+    // Create draggable leaf
+    draggableLeaves.push({
+      name: tree.name,
+      img: leafImg,
+      x: leafStartX + Math.random() * 400,
+      y: leafStartY + Math.random() * 100,
+      width: 100,
+      height: 100
+    });
+  }
+}
+
+function drawScene() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw tree images with cutouts
+  for (let tree of treeData) {
+    const treeImg = treeImages[tree.name];
+    const mask = masks[tree.name];
+    const x = tree.x;
+    const y = tree.y;
+    const size = 200;
+
+    // Draw the tree
+    ctx.drawImage(treeImg, x, y, size, size);
+
+    // Apply mask
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.drawImage(mask, x + size / 4, y + size / 4, size / 2, size / 2);
+    ctx.restore();
+  }
+
+  // Draw leaves
+  for (let leaf of draggableLeaves) {
+    ctx.drawImage(leaf.img, leaf.x, leaf.y, leaf.width, leaf.height);
+  }
+}
+
+function getMousePos(evt) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: evt.clientX - rect.left,
+    y: evt.clientY - rect.top
+  };
+}
+
+canvas.addEventListener("mousedown", (e) => {
+  const mouse = getMousePos(e);
+  for (let leaf of draggableLeaves) {
+    if (
+      mouse.x >= leaf.x &&
+      mouse.x <= leaf.x + leaf.width &&
+      mouse.y >= leaf.y &&
+      mouse.y <= leaf.y + leaf.height
+    ) {
+      draggingLeaf = leaf;
+      offsetX = mouse.x - leaf.x;
+      offsetY = mouse.y - leaf.y;
+      break;
+    }
+  }
+});
+
+canvas.addEventListener("mousemove", (e) => {
+  if (draggingLeaf) {
+    const mouse = getMousePos(e);
+    draggingLeaf.x = mouse.x - offsetX;
+    draggingLeaf.y = mouse.y - offsetY;
+    drawScene();
+  }
+});
+
+canvas.addEventListener("mouseup", () => {
+  draggingLeaf = null;
+});
+
+// Initialize
+(async () => {
+  await loadAssets();
+  drawScene();
+})();
+</script>
+</body>
+</html>
