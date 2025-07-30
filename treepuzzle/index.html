@@ -1,78 +1,98 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Leaf Cutout Masking</title>
+  <title>Leaf Cutout Game</title>
   <style>
-    body {
-      display: flex;
-      gap: 20px;
-      background: #f0f0f0;
-      padding: 20px;
-    }
     canvas {
-      border: 1px solid #ccc;
+      border: 1px solid black;
+      display: block;
+      margin: 20px auto;
     }
   </style>
 </head>
 <body>
+  <canvas id="canvas" width="800" height="600"></canvas>
+
   <script>
-    const trees = ['pine', 'oak', 'maple'];
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
 
-    const treeImages = {};
-    const leafMasks = {};
-    const leafFills = {};
+    // List of trees
+    const treeNames = ['alder', 'ash', 'birch', 'chestnut', 'oak', 'pine', 'willow'];
 
-    const loadImage = (src) => {
+    // Function to load one image
+    function loadImage(src) {
       return new Promise((resolve, reject) => {
         const img = new Image();
-        img.src = src;
         img.onload = () => resolve(img);
         img.onerror = reject;
+        img.src = src;
       });
-    };
+    }
 
+    // Load all tree and leaf images
     async function loadAllImages() {
-      try {
-        for (const tree of trees) {
-          treeImages[tree] = await loadImage(`${tree}.png`);
-          leafMasks[tree] = await loadImage(`${tree}_leaf.png`);
-          leafFills[tree] = await loadImage(`${tree}_leaf.png`); // Using same image to fill the gap
+      const images = {};
+
+      for (const name of treeNames) {
+        images[name] = await loadImage(`${name}.png`);
+        images[`${name}leaf`] = await loadImage(`${name}leaf.png`);
+      }
+
+      return images;
+    }
+
+    // Create a masked version of the tree with a transparent leaf-shaped hole
+    function createMaskedTree(treeImg, leafImg) {
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = treeImg.width;
+      offCanvas.height = treeImg.height;
+      const offCtx = offCanvas.getContext('2d');
+
+      // Draw the tree first
+      offCtx.drawImage(treeImg, 0, 0);
+
+      // Set compositing to remove the leaf shape from the tree
+      offCtx.globalCompositeOperation = 'destination-out';
+      offCtx.drawImage(leafImg, 0, 0);
+
+      // Reset compositing
+      offCtx.globalCompositeOperation = 'source-over';
+
+      return offCanvas;
+    }
+
+    // Main drawing logic
+    async function main() {
+      const images = await loadAllImages();
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const gap = 20;
+      let x = gap;
+      let y = gap;
+
+      for (const name of treeNames) {
+        const tree = images[name];
+        const leaf = images[`${name}leaf`];
+        const maskedTree = createMaskedTree(tree, leaf);
+
+        // Draw masked tree
+        ctx.drawImage(maskedTree, x, y);
+
+        // Draw the leaf in the same position (to "fill in" the hole)
+        ctx.drawImage(leaf, x, y);
+
+        x += tree.width + gap;
+        if (x + tree.width > canvas.width) {
+          x = gap;
+          y += tree.height + gap;
         }
-        drawMaskedTrees();
-      } catch (err) {
-        console.error('Failed to load images', err);
       }
     }
 
-    function drawMaskedTrees() {
-      trees.forEach(tree => {
-        const treeImg = treeImages[tree];
-        const leafMask = leafMasks[tree];
-        const leafFill = leafFills[tree];
-
-        const canvas = document.createElement('canvas');
-        canvas.width = treeImg.width;
-        canvas.height = treeImg.height;
-        const ctx = canvas.getContext('2d');
-
-        // Draw tree image
-        ctx.drawImage(treeImg, 0, 0);
-
-        // Set composite mode to 'destination-out' to punch a hole
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.drawImage(leafMask, 0, 0);
-
-        // Reset mode and draw the leaf behind the cutout
-        ctx.globalCompositeOperation = 'destination-over';
-        ctx.drawImage(leafFill, 0, 0);
-
-        // Add canvas to page
-        document.body.appendChild(canvas);
-      });
-    }
-
-    loadAllImages();
+    main().catch(err => console.error('Error loading images:', err));
   </script>
 </body>
 </html>
