@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Shadow Puppets</title>
+    <!-- Use Tailwind CSS for a clean, modern design -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Set the entire page to a clean black background for the inverted effect */
+        body {
+            background-color: #000;
+            color: #e2e8f0; /* Light gray text for contrast */
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1rem;
+        }
+
+        /* Ensure the canvas is the only visible element from the video stream */
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            max-width: 960px;
+        }
+
+        /* Hide the original video element from view */
+        #videoElement {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main container for the app -->
+    <div class="container">
+        <!-- Canvas where the inverted shadow puppet effect will be drawn -->
+        <canvas id="shadowCanvas" class="w-full h-auto max-w-full rounded-lg shadow-2xl border-4 border-gray-100"></canvas>
+        
+        <!-- Button to start the camera -->
+        <button id="startButton" class="mt-8 px-8 py-4 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-lg rounded-full shadow-lg transition-all duration-300 transform hover:scale-105">
+            Start Camera
+        </button>
+
+        <!-- Message box for user feedback and errors -->
+        <div id="messageBox" class="mt-4 p-4 text-center text-sm text-gray-300">
+            Click 'Start Camera' to begin.
+        </div>
+
+        <!-- Controls container -->
+        <div id="controls-container" class="mt-6 w-full max-w-md hidden">
+            <!-- Threshold slider and label -->
+            <div class="mb-4">
+                <label for="thresholdSlider" class="block text-center mb-2 font-bold text-gray-300">
+                    Brightness Threshold: <span id="thresholdValue">100</span>
+                </label>
+                <input type="range" id="thresholdSlider" min="0" max="255" value="100" 
+                       class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+            </div>
+
+            <div class="flex flex-wrap items-center justify-center gap-4 mb-4">
+                <!-- Invert button -->
+                <button id="invertButton" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-full transition-colors duration-300">
+                    Switch to White on Black
+                </button>
+            </div>
+            
+            <div class="flex flex-wrap items-center justify-center gap-6 mb-4">
+                <!-- Color pickers -->
+                <div class="flex flex-col items-center">
+                    <label for="lightColorPicker" class="text-sm font-bold text-gray-300 mb-1">Background Color</label>
+                    <input type="color" id="lightColorPicker" value="#000000" class="w-12 h-12 rounded-full cursor-pointer">
+                </div>
+                <div class="flex flex-col items-center">
+                    <label for="shadowColorPicker" class="text-sm font-bold text-gray-300 mb-1">Foreground Color</label>
+                    <input type="color" id="shadowColorPicker" value="#ffffff" class="w-12 h-12 rounded-full cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Resolution selector -->
+            <div class="mb-4">
+                <label for="resolutionSelector" class="block text-center mb-2 font-bold text-gray-300">
+                    Select Resolution
+                </label>
+                <select id="resolutionSelector" class="w-full p-2 rounded-lg bg-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    <option value="640x480">640x480 (VGA)</option>
+                    <option value="960x720" selected>960x720</option>
+                    <option value="1280x720">1280x720 (HD)</option>
+                    <option value="1920x1080">1920x1080 (Full HD)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Hidden video element to capture the camera stream -->
+    <video id="videoElement" autoplay playsinline></video>
+
+    <script>
+        // Get references to the HTML elements
+        const videoElement = document.getElementById('videoElement');
+        const canvas = document.getElementById('shadowCanvas');
+        const startButton = document.getElementById('startButton');
+        const messageBox = document.getElementById('messageBox');
+        const controlsContainer = document.getElementById('controls-container');
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const thresholdValueSpan = document.getElementById('thresholdValue');
+        const invertButton = document.getElementById('invertButton');
+        const lightColorPicker = document.getElementById('lightColorPicker');
+        const shadowColorPicker = document.getElementById('shadowColorPicker');
+        const resolutionSelector = document.getElementById('resolutionSelector');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        // State variables for the app's functionality
+        let brightnessThreshold = 100;
+        let isInverted = true;
+        let shadowColor = [255, 255, 255]; // Initial white for inverted mode
+        let lightColor = [0, 0, 0];       // Initial black for inverted mode
+
+        /**
+         * Helper function to convert a hex color string to an RGB array.
+         * @param {string} hex - The hex color code (e.g., "#FF5733").
+         * @returns {number[]} An array with three numbers for R, G, and B values.
+         */
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? [
+                parseInt(result[1], 16),
+                parseInt(result[2], 16),
+                parseInt(result[3], 16)
+            ] : [0, 0, 0];
+        }
+
+        /**
+         * The main animation loop. It captures a frame from the video,
+         * processes it to create the shadow puppet effect, and draws it to the canvas.
+         */
+        function processVideoFrame() {
+            // Check if the video is ready to be drawn
+            if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+                // Draw the current video frame to the canvas, fitting it to the canvas size
+                ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+                // Get the image data from the canvas
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+
+                // Loop through all pixels in the image data
+                for (let i = 0; i < data.length; i += 4) {
+                    // Calculate the average brightness of the pixel (R, G, B values)
+                    const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+
+                    // Determine which colors to apply based on the brightness and invert state
+                    let pixelColor;
+                    if (brightness < brightnessThreshold) {
+                        pixelColor = isInverted ? shadowColor : lightColor;
+                    } else {
+                        pixelColor = isInverted ? lightColor : shadowColor;
+                    }
+
+                    // Set the pixel color on the canvas
+                    data[i] = pixelColor[0];    // Red
+                    data[i + 1] = pixelColor[1]; // Green
+                    data[i + 2] = pixelColor[2]; // Blue
+                    // data[i + 3] (alpha) remains 255 (fully opaque)
+                }
+
+                // Put the modified image data back onto the canvas
+                ctx.putImageData(imageData, 0, 0);
+            }
+            
+            // Continue the animation loop
+            requestAnimationFrame(processVideoFrame);
+        }
+
+        /**
+         * Starts the camera, plays the video stream, and starts the processing loop.
+         */
+        async function startCamera() {
+            messageBox.textContent = 'Requesting camera access...';
+            try {
+                // Request access to the user's video camera
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoElement.srcObject = stream;
+                
+                // When the video starts playing, set the initial canvas size and begin the processing loop
+                videoElement.addEventListener('loadedmetadata', () => {
+                    canvas.width = videoElement.videoWidth;
+                    canvas.height = videoElement.videoHeight;
+                    videoElement.play();
+                    processVideoFrame();
+                    messageBox.textContent = 'Camera started. Wave your hands!';
+                    startButton.style.display = 'none'; // Hide the button once camera is on
+                    controlsContainer.classList.remove('hidden'); // Show the controls
+                });
+
+            } catch (err) {
+                // Handle cases where the user denies permission or no camera is found
+                console.error('An error occurred: ' + err);
+                messageBox.textContent = `Error: Could not access the camera. Please check permissions.`;
+                startButton.style.display = 'block'; // Keep the button visible
+            }
+        }
+        
+        // Add a click event listener to the start button
+        startButton.addEventListener('click', startCamera);
+
+        // --- Event Listeners for New Controls ---
+
+        // Threshold slider to update the brightness threshold and display value
+        thresholdSlider.addEventListener('input', (event) => {
+            brightnessThreshold = parseInt(event.target.value, 10);
+            thresholdValueSpan.textContent = brightnessThreshold;
+        });
+
+        // Invert button to toggle the mode and button text
+        invertButton.addEventListener('click', () => {
+            isInverted = !isInverted;
+            invertButton.textContent = isInverted ? 'Switch to White on Black' : 'Switch to Black on White';
+        });
+
+        // Color pickers to update the shadow and light colors
+        lightColorPicker.addEventListener('input', (event) => {
+            lightColor = hexToRgb(event.target.value);
+        });
+
+        shadowColorPicker.addEventListener('input', (event) => {
+            shadowColor = hexToRgb(event.target.value);
+        });
+
+        // Resolution selector to change the canvas size
+        resolutionSelector.addEventListener('change', (event) => {
+            const [width, height] = event.target.value.split('x').map(Number);
+            canvas.width = width;
+            canvas.height = height;
+        });
+    </script>
+
+</body>
+</html>
