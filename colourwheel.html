@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Process Color Selector</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: #f8f8f8;
+      font-family: Arial, sans-serif;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
+    
+    .main-container {
+      position: relative;
+      width: 600px;
+      height: 600px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #circleCanvas {
+      background: white;
+      border-radius: 50%;
+      border: 3px solid #333;
+    }
+
+    .tab {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      cursor: grab;
+      z-index: 10;
+      border: 2px solid black;
+    }
+
+    .output-container {
+      display: flex;
+      align-items: flex-start;
+      margin-top: 20px;
+      gap: 30px;
+    }
+    
+    .output-details {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .color-preview {
+      width: 100px;
+      height: 100px;
+      border: 2px solid black;
+      background-color: white;
+    }
+
+    .cmyk-values, .hex-rgb-values {
+      font-size: 16px;
+      margin-top: 10px;
+    }
+    
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(10, 10px);
+      width: 100px;
+      height: 100px;
+      border: 1px solid #ccc;
+      margin-top: 20px;
+    }
+
+    .grid-cell {
+      width: 10px;
+      height: 10px;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="main-container">
+    <canvas id="circleCanvas" width="600" height="600"></canvas>
+    
+    <!-- Draggable tabs -->
+    <div class="tab" id="tab-c" style="background: #00FFFF;" data-color="cyan"></div>
+    <div class="tab" id="tab-m" style="background: #FF00FF;" data-color="magenta"></div>
+    <div class="tab" id="tab-y" style="background: #FFFF00;" data-color="yellow"></div>
+    <div class="tab" id="tab-k" style="background: #000000; border: 2px solid white;" data-color="black"></div>
+  </div>
+
+  <div class="output-container">
+      <div class="output-details">
+        <div class="color-preview"></div>
+        <div class="cmyk-values">C: 0% M: 0% Y: 0% K: 0%</div>
+        <div class="hex-rgb-values">HEX: #FFFFFF, RGB: rgb(255, 255, 255)</div>
+      </div>
+      <div class="grid-container" id="grid-container"></div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("circleCanvas");
+    const ctx = canvas.getContext("2d");
+    const mainContainer = document.querySelector(".main-container");
+    const gridContainer = document.getElementById("grid-container");
+    
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = 250;
+    
+    const labels = ["0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"];
+    
+    const tabs = document.querySelectorAll(".tab");
+    const colorPreview = document.querySelector(".color-preview");
+    const cmykValuesText = document.querySelector(".cmyk-values");
+    const hexRgbValuesText = document.querySelector(".hex-rgb-values");
+    
+    let isDragging = false;
+    let activeTab = null;
+    let activeColor = '';
+    
+    const cmyk = {
+      cyan: 0,
+      magenta: 0,
+      yellow: 0,
+      black: 0
+    };
+
+    function drawCircle() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.closePath();
+      drawLabels();
+    }
+    
+    function drawLabels() {
+      ctx.font = "16px Arial";
+      ctx.fillStyle = "black";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+    
+      const numLabels = labels.length;
+      const angleStep = (2 * Math.PI) / numLabels;
+      const padding = 20;
+    
+      labels.forEach((label, i) => {
+        let angle = i * angleStep - Math.PI / 2;
+        let x = centerX + (radius - padding) * Math.cos(angle);
+        let y = centerY + (radius - padding) * Math.sin(angle);
+        ctx.fillText(label, x, y);
+      });
+    }
+
+    function cmykToRgb(c, m, y, k) {
+      const r = Math.round(255 * (1 - c / 100) * (1 - k / 100));
+      const g = Math.round(255 * (1 - m / 100) * (1 - k / 100));
+      const b = Math.round(255 * (1 - y / 100) * (1 - k / 100));
+      return { r, g, b };
+    }
+    
+    function rgbToHex(r, g, b) {
+        return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+    }
+
+    function updateColor() {
+      const { r, g, b } = cmykToRgb(cmyk.cyan, cmyk.magenta, cmyk.yellow, cmyk.black);
+      const hex = rgbToHex(r, g, b);
+      colorPreview.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+      cmykValuesText.textContent = `C: ${cmyk.cyan}% M: ${cmyk.magenta}% Y: ${cmyk.yellow}% K: ${cmyk.black}%`;
+      hexRgbValuesText.textContent = `HEX: ${hex}, RGB: rgb(${r}, ${g}, ${b})`;
+      updateGrid();
+    }
+    
+    function updateGrid() {
+        gridContainer.innerHTML = '';
+        const cells = Array(100).fill(null);
+        
+        let cCount = cmyk.cyan;
+        let mCount = cmyk.magenta;
+        let yCount = cmyk.yellow;
+        let kCount = cmyk.black;
+        
+        const cColor = '#00FFFF';
+        const mColor = '#FF00FF';
+        const yColor = '#FFFF00';
+        const kColor = '#000000';
+        const white = '#FFFFFF';
+        
+        for (let i = 0; i < 100; i++) {
+            let color = white;
+            if (cCount > 0) {
+                color = cColor;
+                cCount--;
+            } else if (mCount > 0) {
+                color = mColor;
+                mCount--;
+            } else if (yCount > 0) {
+                color = yColor;
+                yCount--;
+            } else if (kCount > 0) {
+                color = kColor;
+                kCount--;
+            }
+            cells[i] = color;
+        }
+
+        cells.forEach(cellColor => {
+            const cell = document.createElement('div');
+            cell.classList.add('grid-cell');
+            cell.style.backgroundColor = cellColor;
+            gridContainer.appendChild(cell);
+        });
+    }
+    
+    function setInitialTabPositions() {
+      const positions = {
+        cyan: { x: centerX, y: centerY - radius },
+        magenta: { x: centerX + 50, y: centerY - radius },
+        yellow: { x: centerX + 100, y: centerY - radius },
+        black: { x: centerX + 150, y: centerY - radius }
+      };
+      
+      tabs.forEach(tab => {
+        const color = tab.dataset.color;
+        if (positions[color]) {
+          tab.style.top = `${positions[color].y - tab.offsetHeight / 2}px`;
+          tab.style.left = `${positions[color].x - tab.offsetWidth / 2}px`;
+        }
+      });
+    }
+
+    tabs.forEach(tab => {
+      tab.addEventListener("mousedown", (e) => {
+        isDragging = true;
+        activeTab = tab;
+        activeColor = tab.dataset.color;
+        tab.style.cursor = "grabbing";
+        e.preventDefault();
+      });
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!isDragging || !activeTab) return;
+      
+      const containerRect = mainContainer.getBoundingClientRect();
+      const circleCenter = {
+        x: containerRect.left + centerX,
+        y: containerRect.top + centerY
+      };
+
+      const dx = e.clientX - circleCenter.x;
+      const dy = e.clientY - circleCenter.y;
+      
+      let angle = Math.atan2(dy, dx);
+      
+      // Convert angle to a 0-360 range, starting from the top (12 o'clock) and going clockwise.
+      let degrees = angle * (180 / Math.PI);
+      degrees = (degrees + 450) % 360; 
+
+      // Constrain percentage to 0-100% within a specific arc.
+      const arcEndDegrees = 327.27; // Approximately 100% label position (10/11 * 360)
+      let percentage = 0;
+      if (degrees > arcEndDegrees) {
+        percentage = 0;
+      } else {
+        percentage = Math.round((degrees / arcEndDegrees) * 100);
+      }
+      
+      cmyk[activeColor] = Math.max(0, Math.min(100, percentage));
+      
+      const newX = circleCenter.x + Math.cos(angle) * radius - activeTab.offsetWidth / 2;
+      const newY = circleCenter.y + Math.sin(angle) * radius - activeTab.offsetHeight / 2;
+
+      activeTab.style.left = `${newX - containerRect.left}px`;
+      activeTab.style.top = `${newY - containerRect.top}px`;
+
+      updateColor();
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (activeTab) {
+        isDragging = false;
+        activeTab.style.cursor = "grab";
+        activeTab = null;
+        activeColor = '';
+      }
+    });
+
+    // Initial setup
+    drawCircle();
+    setInitialTabPositions();
+    updateColor();
+  </script>
+</body>
+</html>
