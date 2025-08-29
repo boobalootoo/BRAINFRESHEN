@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK Bird Watcher</title>
+    <!-- Use Tailwind CSS for a modern, responsive design -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js CDN for sound playback -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        /* Custom styles for animations and layout adjustments */
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: pan-y;
+            background-color: #eef5e9;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .bird-popup {
+            position: absolute;
+            animation: fadeInOut 5s forwards;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: scale(0.5); }
+            10% { opacity: 1; transform: scale(1); }
+            90% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0.5); }
+        }
+
+        .bird-item-image {
+            transition: transform 0.2s ease-in-out;
+            cursor: pointer;
+        }
+
+        .bird-item-image:active, .bird-item-image:hover {
+            transform: scale(1.05);
+        }
+
+        .bird-gallery-item {
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .bird-gallery-item:active {
+            transform: scale(0.95);
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 0.5rem;
+        }
+
+        .camera-container {
+            position: relative;
+            flex-grow: 1;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        
+        /* Draggable item that follows the cursor/touch */
+        #dragging-preview {
+            position: fixed;
+            z-index: 50;
+            pointer-events: none;
+            opacity: 0.8;
+            transition: transform 0.05s ease-out;
+            border-radius: 9999px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        .bird-gallery-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+        }
+        
+        .bird-gallery-item img {
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+        }
+
+        /* Responsive layout for gallery */
+        .scroll-container {
+            display: flex;
+            padding: 0.5rem;
+            overflow-x: auto;
+            gap: 0.5rem;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+        }
+
+    </style>
+</head>
+<body class="flex flex-col">
+
+    <!-- Header and Mode Toggle Buttons -->
+    <div class="p-4 bg-white shadow-md flex-none">
+        <h1 class="text-3xl font-extrabold text-green-800 tracking-tight text-center mb-2">UK Bird Watcher</h1>
+        <p class="text-sm text-gray-500 text-center mb-4">Identify or mix and match bird songs!</p>
+        <div class="flex justify-center">
+            <button id="id-mode-btn" class="flex-1 px-4 py-2 mr-2 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 bg-blue-500 text-white">ID Mode</button>
+            <button id="dj-mode-btn" class="flex-1 px-4 py-2 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 bg-gray-300 text-gray-800">DJ Mode</button>
+        </div>
+    </div>
+
+    <!-- Main Camera Feed and Pop-up Birds Container -->
+    <div id="camera-container" class="camera-container rounded-lg shadow-lg m-4 flex-grow">
+        <video id="camera-feed" class="rounded-lg" autoplay playsinline muted></video>
+        <div id="loading-message" class="absolute text-white text-xl">Loading camera...</div>
+        <div id="error-message" class="absolute text-red-500 text-xl hidden"></div>
+        <!-- Pop-up birds will be appended here in ID mode -->
+        <!-- Dragged birds will be appended here in DJ mode -->
+    </div>
+
+    <!-- Bottom Bar with Bird Species Gallery -->
+    <div id="bottom-bar" class="bottom-bar bg-white mt-auto shadow-md rounded-t-lg flex-none">
+        <div id="bird-gallery" class="scroll-container">
+            <!-- Bird items will be dynamically loaded here -->
+        </div>
+    </div>
+    
+    <!-- Dragging preview element -->
+    <img id="dragging-preview" class="hidden">
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const cameraFeed = document.getElementById('camera-feed');
+            const loadingMessage = document.getElementById('loading-message');
+            const errorMessage = document.getElementById('error-message');
+            const cameraContainer = document.getElementById('camera-container');
+            const birdGallery = document.getElementById('bird-gallery');
+            const idModeBtn = document.getElementById('id-mode-btn');
+            const djModeBtn = document.getElementById('dj-mode-btn');
+            const draggingPreview = document.getElementById('dragging-preview');
+
+            const baseURL = "https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/bird/";
+
+            const birdSpecies = [
+                { name: "Blackbird", fileName: "blackbird" },
+                { name: "Wren", fileName: "wren" },
+                { name: "Great Tit", fileName: "greattit" },
+                { name: "Blue Tit", fileName: "bluetit" },
+                { name: "Sparrow", fileName: "sparrow" },
+                { name: "Starling", fileName: "starling" },
+                { name: "Pigeon", fileName: "pigeon" },
+                { name: "Goldfinch", fileName: "goldfinch" },
+                { name: "Chaffinch", fileName: "chaffinch" },
+                { name: "Song Thrush", fileName: "songthrush" },
+                { name: "Chiffchaff", fileName: "chiffchaff" },
+                { name: "Blackcap", fileName: "blackcap" },
+                { name: "Dunnock", fileName: "dunnock" },
+                { name: "Greenfinch", fileName: "greenfinch" },
+                { name: "Robin", fileName: "robin" }
+            ];
+
+            const birdPlayers = {};
+            birdSpecies.forEach(bird => {
+                const soundPath = `${baseURL}${bird.fileName}.mp3`;
+                birdPlayers[bird.name] = new Tone.Player(soundPath).toDestination();
+                birdPlayers[bird.name].loop = true;
+                birdPlayers[bird.name].onload = () => {};
+                birdPlayers[bird.name].onerror = (e) => {
+                    console.error(`Error loading ${bird.name} sound:`, e);
+                };
+            });
+
+            let currentMode = 'id';
+            let spawnIntervalId;
+            let currentDragBird = null;
+            let currentDragPlayer = null;
+            let currentDropElement = null;
+            
+            async function startCamera() {
+                try {
+                    const constraints = { video: { facingMode: { exact: "environment" } } };
+                    let stream;
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    } catch (e) {
+                        console.warn("Rear camera not available, falling back to default.", e);
+                        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    }
+                    cameraFeed.srcObject = stream;
+                    loadingMessage.classList.add('hidden');
+                    cameraFeed.classList.remove('hidden');
+                } catch (err) {
+                    console.error("Error accessing camera: ", err);
+                    loadingMessage.classList.add('hidden');
+                    errorMessage.classList.remove('hidden');
+                    errorMessage.textContent = `Error: ${err.name}. Please allow camera access.`;
+                }
+            }
+
+            function spawnRandomBird() {
+                const randomIndex = Math.floor(Math.random() * birdSpecies.length);
+                const bird = birdSpecies[randomIndex];
+
+                const birdImage = document.createElement('img');
+                birdImage.src = `${baseURL}${bird.fileName}.png`;
+                birdImage.alt = bird.name;
+                birdImage.onerror = () => {
+                    console.error(`Failed to load image for ${bird.name}.`);
+                    birdImage.src = `https://placehold.co/100x100/CCCCCC/000000?text=Error`;
+                };
+                birdImage.classList.add('bird-popup', 'rounded-full', 'shadow-lg');
+
+                const size = Math.floor(Math.random() * (120 - 60 + 1)) + 60;
+                birdImage.style.width = `${size}px`;
+                birdImage.style.height = `${size}px`;
+
+                if (Math.random() > 0.5) birdImage.style.transform = 'scaleX(-1)';
+
+                const containerRect = cameraContainer.getBoundingClientRect();
+                const maxX = containerRect.width - size;
+                const maxY = containerRect.height - size;
+
+                const randomX = Math.random() * maxX;
+                const randomY = Math.random() * (maxY - 50);
+
+                birdImage.style.left = `${randomX}px`;
+                birdImage.style.top = `${randomY}px`;
+
+                cameraContainer.appendChild(birdImage);
+
+                setTimeout(() => { birdImage.remove(); }, 5000);
+            }
+
+            function populateBirdGallery() {
+                birdSpecies.forEach(bird => {
+                    const birdItem = document.createElement('div');
+                    birdItem.classList.add('bird-gallery-item', 'bg-gray-200', 'hover:bg-gray-300', 'rounded-lg');
+                    birdItem.setAttribute('data-bird', bird.name);
+
+                    const img = document.createElement('img');
+                    img.src = `${baseURL}${bird.fileName}.png`;
+                    img.alt = bird.name;
+                    img.onerror = () => {
+                        console.error(`Failed to load image for ${bird.name}.`);
+                        img.src = `https://placehold.co/50x50/CCCCCC/000000?text=Error`;
+                    };
+                    img.classList.add('bird-item-image');
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = bird.name;
+                    nameSpan.classList.add('bird-item-name', 'text-sm', 'font-semibold', 'text-gray-800');
+                    nameSpan.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const utterance = new SpeechSynthesisUtterance(bird.name);
+                        speechSynthesis.speak(utterance);
+                    });
+                    
+                    birdItem.appendChild(img);
+                    birdItem.appendChild(nameSpan);
+                    birdGallery.appendChild(birdItem);
+
+                    // Add a listener to handle click events on the gallery item image
+                    img.addEventListener('click', async () => {
+                      if (Tone.context.state !== 'running') {
+                          await Tone.start();
+                      }
+                      const player = birdPlayers[bird.name];
+                      if (player) {
+                          if (player.state === 'started') {
+                              player.stop();
+                          } else {
+                              player.start();
+                          }
+                      }
+                    });
+                });
+            }
+
+            function setMode(mode) {
+                currentMode = mode;
+                if (currentMode === 'id') {
+                    idModeBtn.classList.replace('bg-gray-300', 'bg-blue-500');
+                    idModeBtn.classList.replace('text-gray-800', 'text-white');
+                    djModeBtn.classList.replace('bg-blue-500', 'bg-gray-300');
+                    djModeBtn.classList.replace('text-white', 'text-gray-800');
+
+                    document.querySelectorAll('.draggable-bird').forEach(bird => {
+                        const playerToStop = birdPlayers[bird.dataset.player];
+                        if (playerToStop && playerToStop.state === 'started') playerToStop.stop();
+                        bird.remove();
+                    });
+                    if (!spawnIntervalId) spawnIntervalId = setInterval(spawnRandomBird, 3000);
+                } else {
+                    djModeBtn.classList.replace('bg-gray-300', 'bg-blue-500');
+                    djModeBtn.classList.replace('text-gray-800', 'text-white');
+                    idModeBtn.classList.replace('bg-blue-500', 'bg-gray-300');
+                    idModeBtn.classList.replace('text-white', 'text-gray-800');
+
+                    if (spawnIntervalId) {
+                        clearInterval(spawnIntervalId);
+                        spawnIntervalId = null;
+                    }
+                    document.querySelectorAll('.bird-popup').forEach(bird => bird.remove());
+                }
+            }
+            
+            // Unify mouse and touch event logic for dragging
+            function getPointerPosition(e) {
+                const rect = document.body.getBoundingClientRect();
+                return {
+                    x: e.clientX || e.touches[0].clientX,
+                    y: e.clientY || e.touches[0].clientY,
+                    rect
+                };
+            }
+
+            document.addEventListener('mousedown', startDrag);
+            document.addEventListener('touchstart', startDrag);
+
+            function startDrag(e) {
+                if (currentMode !== 'dj') return;
+                
+                const target = e.target.closest('.bird-gallery-item');
+                if (!target) return;
+
+                const birdName = target.getAttribute('data-bird');
+                currentDragBird = birdName;
+                currentDragPlayer = birdPlayers[birdName];
+
+                const { x, y } = getPointerPosition(e);
+                const targetRect = target.getBoundingClientRect();
+
+                draggingPreview.src = target.querySelector('img').src;
+                draggingPreview.style.width = `${targetRect.width}px`;
+                draggingPreview.style.height = `${targetRect.height}px`;
+                draggingPreview.style.transform = `translate(${x - targetRect.width / 2}px, ${y - targetRect.height / 2}px)`;
+                draggingPreview.classList.remove('hidden');
+
+                document.addEventListener('mousemove', drag);
+                document.addEventListener('touchmove', drag);
+                document.addEventListener('mouseup', endDrag);
+                document.addEventListener('touchend', endDrag);
+                
+                e.preventDefault();
+            }
+
+            function drag(e) {
+                if (!currentDragBird) return;
+                const { x, y } = getPointerPosition(e);
+                draggingPreview.style.transform = `translate(${x - draggingPreview.offsetWidth / 2}px, ${y - draggingPreview.offsetHeight / 2}px)`;
+
+                const cameraRect = cameraContainer.getBoundingClientRect();
+                if (x >= cameraRect.left && x <= cameraRect.right && y >= cameraRect.top && y <= cameraRect.bottom) {
+                    cameraContainer.classList.add('border-4', 'border-blue-500');
+                    currentDropElement = cameraContainer;
+                } else {
+                    cameraContainer.classList.remove('border-4', 'border-blue-500');
+                    currentDropElement = null;
+                }
+
+                e.preventDefault();
+            }
+
+            async function endDrag(e) {
+                if (!currentDragBird) return;
+
+                const { x, y } = getPointerPosition(e);
+
+                if (currentDropElement) {
+                    if (Tone.context.state !== 'running') {
+                        await Tone.start();
+                    }
+                    if (currentDragPlayer) currentDragPlayer.start();
+
+                    const newBirdInstance = document.createElement('img');
+                    newBirdInstance.src = draggingPreview.src;
+                    newBirdInstance.alt = currentDragBird;
+                    newBirdInstance.classList.add('draggable-bird', 'absolute', 'rounded-full', 'shadow-lg', 'w-24', 'h-24', 'cursor-grab', 'touch-pan-y');
+                    newBirdInstance.dataset.player = currentDragBird;
+
+                    const containerRect = cameraContainer.getBoundingClientRect();
+                    const birdX = x - containerRect.left - newBirdInstance.offsetWidth / 2;
+                    const birdY = y - containerRect.top - newBirdInstance.offsetHeight / 2;
+
+                    newBirdInstance.style.left = `${birdX}px`;
+                    newBirdInstance.style.top = `${birdY}px`;
+                    cameraContainer.appendChild(newBirdInstance);
+
+                    // Touch and mouse listeners for repositioning the dropped bird
+                    const moveHandler = (e) => {
+                        const { x: newX, y: newY } = getPointerPosition(e);
+                        const relocatedX = newX - containerRect.left - newBirdInstance.offsetWidth / 2;
+                        const relocatedY = newY - containerRect.top - newBirdInstance.offsetHeight / 2;
+                        newBirdInstance.style.left = `${relocatedX}px`;
+                        newBirdInstance.style.top = `${relocatedY}px`;
+                    };
+
+                    const upHandler = () => {
+                        document.removeEventListener('mousemove', moveHandler);
+                        document.removeEventListener('touchmove', moveHandler);
+                        document.removeEventListener('mouseup', upHandler);
+                        document.removeEventListener('touchend', upHandler);
+                    };
+
+                    newBirdInstance.addEventListener('mousedown', (e) => {
+                      e.stopPropagation();
+                      document.addEventListener('mousemove', moveHandler);
+                      document.addEventListener('mouseup', upHandler);
+                    });
+
+                    newBirdInstance.addEventListener('touchstart', (e) => {
+                      e.stopPropagation();
+                      document.addEventListener('touchmove', moveHandler);
+                      document.addEventListener('touchend', upHandler);
+                    });
+
+                    // Remove bird on double click / double tap
+                    newBirdInstance.addEventListener('dblclick', () => {
+                        const playerToStop = birdPlayers[newBirdInstance.dataset.player];
+                        if (playerToStop && playerToStop.state === 'started') playerToStop.stop();
+                        newBirdInstance.remove();
+                    });
+                    newBirdInstance.addEventListener('touchend', (e) => {
+                        const now = new Date().getTime();
+                        const lastTouch = newBirdInstance.dataset.lastTouch || 0;
+                        const delta = now - lastTouch;
+                        if (delta < 300 && delta > 0) {
+                            const playerToStop = birdPlayers[newBirdInstance.dataset.player];
+                            if (playerToStop && playerToStop.state === 'started') playerToStop.stop();
+                            newBirdInstance.remove();
+                        }
+                        newBirdIns
