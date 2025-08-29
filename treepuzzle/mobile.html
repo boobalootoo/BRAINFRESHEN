@@ -86,7 +86,6 @@
         let dragging = null;
         let offsetX = 0;
         let offsetY = 0;
-        let moved = false;
         let isSolved = {};
         
         function resizeCanvas() {
@@ -189,23 +188,41 @@
                 }
             });
         }
+        
+        // --- FIX START ---
+        // Helper to get coordinates relative to the canvas
+        function getCanvasLocation(e) {
+            const rect = canvas.getBoundingClientRect();
+            let clientX, clientY;
+            
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
 
         function handleDragStart(e) {
             e.preventDefault();
-            const clientX = e.clientX || e.touches[0].clientX;
-            const clientY = e.clientY || e.touches[0].clientY;
+            const { x, y } = getCanvasLocation(e);
 
             // Find the leaf being clicked
             for (let i = leafSprites.length - 1; i >= 0; i--) {
                 const leaf = leafSprites[i];
                 if (!isSolved[leaf.name] && 
-                    clientX > leaf.x && clientX < leaf.x + leaf.width &&
-                    clientY > leaf.y && clientY < leaf.y + leaf.height
+                    x > leaf.x && x < leaf.x + leaf.width &&
+                    y > leaf.y && y < leaf.y + leaf.height
                 ) {
                     dragging = leaf;
-                    offsetX = clientX - leaf.x;
-                    offsetY = clientY - leaf.y;
-                    moved = false;
+                    offsetX = x - leaf.x;
+                    offsetY = y - leaf.y;
 
                     // Move the dragging leaf to the end of the array to draw on top
                     leafSprites.splice(i, 1);
@@ -218,12 +235,10 @@
         function handleDrag(e) {
             if (!dragging) return;
             e.preventDefault();
-            const clientX = e.clientX || e.touches[0].clientX;
-            const clientY = e.clientY || e.touches[0].clientY;
+            const { x, y } = getCanvasLocation(e);
             
-            dragging.x = clientX - offsetX;
-            dragging.y = clientY - offsetY;
-            moved = true;
+            dragging.x = x - offsetX;
+            dragging.y = y - offsetY;
             draw();
         }
 
@@ -258,6 +273,8 @@
             dragging = null;
             draw();
         }
+
+        // --- FIX END ---
 
         function checkWinCondition() {
             const allSolved = Object.values(isSolved).every(status => status === true);
