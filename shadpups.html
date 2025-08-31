@@ -106,6 +106,11 @@
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+                // Apply a horizontal flip transformation to fix mirroring
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.translate(-canvas.width, 0);
+
                 // Pass the video frame to the hand detection model
                 const hands = await model.estimateHands(videoElement);
 
@@ -115,6 +120,8 @@
                         drawHand(hand.keypoints);
                     }
                 }
+                // Restore the canvas to its original state for the next frame
+                ctx.restore();
             }
             
             // Continue the animation loop
@@ -122,14 +129,17 @@
         }
 
         /**
-         * Draws a stylized, geometric hand using rectangles and circles to represent
-         * the palm and finger segments.
+         * Draws a stylized, geometric hand using rectangles to represent the palm and finger segments.
          * @param {Array} keypoints The 21 keypoints detected by the hand model.
          */
         function drawHand(keypoints) {
             ctx.fillStyle = '#000';
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 1;
+            
+            // Draw the palm as a square
+            const palmWidth = 100;
+            const palmHeight = 100;
+            const palmCenter = keypoints[9];
+            ctx.fillRect(palmCenter.x - palmWidth / 2, palmCenter.y, palmWidth, palmHeight);
 
             // Define the segments for each finger and the thumb
             // Each array contains the keypoint indices for that finger's segments.
@@ -141,24 +151,18 @@
             ];
 
             const thumb = [
-                [1, 2, 3, 4]    // Thumb has a different structure
+                1, 2, 3, 4
             ];
             
-            // Draw the palm as a square
-            const palmWidth = 100; // You can adjust this value
-            const palmHeight = 100; // You can adjust this value
-            const palmCenter = keypoints[9]; // Use middle finger base as a rough center
-            ctx.fillRect(palmCenter.x - palmWidth / 2, palmCenter.y, palmWidth, palmHeight);
-
-
-            // Draw the fingers (3 cylinders each)
-            fingers.forEach(finger => {
-                for (let i = 0; i < finger.length - 1; i++) {
-                    const startPoint = keypoints[finger[i]];
-                    const endPoint = keypoints[finger[i + 1]];
+            // Helper function to draw a single finger or thumb
+            const drawSegments = (segmentIndices, isThumb = false) => {
+                const numSegments = isThumb ? segmentIndices.length - 1 : segmentIndices.length - 1;
+                for (let i = 0; i < numSegments; i++) {
+                    const startPoint = keypoints[segmentIndices[i]];
+                    const endPoint = keypoints[segmentIndices[i + 1]];
                     const angle = Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
                     const length = Math.sqrt(Math.pow(endPoint.x - startPoint.x, 2) + Math.pow(endPoint.y - startPoint.y, 2));
-                    const width = 20; // You can adjust this value
+                    const width = 20;
 
                     ctx.save();
                     ctx.translate(startPoint.x, startPoint.y);
@@ -166,28 +170,13 @@
                     ctx.fillRect(0, -width / 2, length, width);
                     ctx.restore();
                 }
-            });
+            };
 
-            // Draw the thumb (2 cylinders)
-            const thumbSegments = [
-                [1, 2],
-                [2, 3],
-                [3, 4]
-            ];
-            
-            thumbSegments.forEach(segment => {
-                const startPoint = keypoints[segment[0]];
-                const endPoint = keypoints[segment[1]];
-                const angle = Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
-                const length = Math.sqrt(Math.pow(endPoint.x - startPoint.x, 2) + Math.pow(endPoint.y - startPoint.y, 2));
-                const width = 20; // You can adjust this value
-                
-                ctx.save();
-                ctx.translate(startPoint.x, startPoint.y);
-                ctx.rotate(angle);
-                ctx.fillRect(0, -width / 2, length, width);
-                ctx.restore();
-            });
+            // Draw the fingers
+            fingers.forEach(finger => drawSegments(finger));
+
+            // Draw the thumb
+            drawSegments(thumb, true);
         }
 
 
