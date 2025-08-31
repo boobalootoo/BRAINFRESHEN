@@ -122,41 +122,74 @@
         }
 
         /**
-         * Draws a polygon around the detected hand keypoints to create a more realistic silhouette.
+         * Draws a stylized, geometric hand using rectangles and circles to represent
+         * the palm and finger segments.
          * @param {Array} keypoints The 21 keypoints detected by the hand model.
          */
         function drawHand(keypoints) {
-            // Set the fill color to black
             ctx.fillStyle = '#000';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
 
-            // Define the paths to draw the hand and fingers
-            const paths = [
-                // Connect palm to wrist and fingers
-                [0, 1, 5, 9, 13, 17, 0],
-                // Thumb
-                [0, 1, 2, 3, 4],
-                // Index finger
-                [5, 6, 7, 8],
-                // Middle finger
-                [9, 10, 11, 12],
-                // Ring finger
-                [13, 14, 15, 16],
-                // Pinky finger
-                [17, 18, 19, 20]
+            // Define the segments for each finger and the thumb
+            // Each array contains the keypoint indices for that finger's segments.
+            const fingers = [
+                [5, 6, 7, 8],   // Index finger
+                [9, 10, 11, 12], // Middle finger
+                [13, 14, 15, 16], // Ring finger
+                [17, 18, 19, 20]  // Pinky finger
             ];
 
-            // Draw each segment as a separate path
-            paths.forEach(path => {
-                ctx.beginPath();
-                ctx.moveTo(keypoints[path[0]].x, keypoints[path[0]].y);
-                for (let i = 1; i < path.length; i++) {
-                    ctx.lineTo(keypoints[path[i]].x, keypoints[path[i]].y);
+            const thumb = [
+                [1, 2, 3, 4]    // Thumb has a different structure
+            ];
+            
+            // Draw the palm as a square
+            const palmWidth = 100; // You can adjust this value
+            const palmHeight = 100; // You can adjust this value
+            const palmCenter = keypoints[9]; // Use middle finger base as a rough center
+            ctx.fillRect(palmCenter.x - palmWidth / 2, palmCenter.y, palmWidth, palmHeight);
+
+
+            // Draw the fingers (3 cylinders each)
+            fingers.forEach(finger => {
+                for (let i = 0; i < finger.length - 1; i++) {
+                    const startPoint = keypoints[finger[i]];
+                    const endPoint = keypoints[finger[i + 1]];
+                    const angle = Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
+                    const length = Math.sqrt(Math.pow(endPoint.x - startPoint.x, 2) + Math.pow(endPoint.y - startPoint.y, 2));
+                    const width = 20; // You can adjust this value
+
+                    ctx.save();
+                    ctx.translate(startPoint.x, startPoint.y);
+                    ctx.rotate(angle);
+                    ctx.fillRect(0, -width / 2, length, width);
+                    ctx.restore();
                 }
-                ctx.lineTo(keypoints[path[0]].x, keypoints[path[0]].y); // Close the path
-                ctx.closePath();
-                ctx.fill();
+            });
+
+            // Draw the thumb (2 cylinders)
+            const thumbSegments = [
+                [1, 2],
+                [2, 3],
+                [3, 4]
+            ];
+            
+            thumbSegments.forEach(segment => {
+                const startPoint = keypoints[segment[0]];
+                const endPoint = keypoints[segment[1]];
+                const angle = Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
+                const length = Math.sqrt(Math.pow(endPoint.x - startPoint.x, 2) + Math.pow(endPoint.y - startPoint.y, 2));
+                const width = 20; // You can adjust this value
+                
+                ctx.save();
+                ctx.translate(startPoint.x, startPoint.y);
+                ctx.rotate(angle);
+                ctx.fillRect(0, -width / 2, length, width);
+                ctx.restore();
             });
         }
+
 
         /**
          * Starts the camera, loads the model, and begins the main loop.
