@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mindful Breathing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117;
+            color: #e5e7eb;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        #prompt-message {
+            position: absolute;
+            font-size: 1.5rem;
+            opacity: 1;
+            transition: opacity 0.5s ease;
+        }
+
+        .hidden {
+            opacity: 0 !important;
+        }
+
+        .visual-element {
+            position: absolute;
+            font-size: 10rem;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            transform: scale(0.2);
+            transition: transform 4s linear, opacity 0.5s ease-in-out;
+            line-height: 1;
+        }
+
+        /* Rose Inhale Animation */
+        .rose-in {
+            opacity: 1;
+            transform: scale(1.5);
+        }
+
+        /* Bubbles */
+        .bubble-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            pointer-events: none;
+        }
+        
+        .bubble-container.visible {
+            opacity: 1;
+        }
+
+        .bubble {
+            position: absolute;
+            background: rgba(173, 216, 230, 0.5);
+            border-radius: 50%;
+            box-shadow: 0 0 20px rgba(173, 216, 230, 0.8), inset 0 0 15px rgba(255, 255, 255, 0.7);
+            transform: translateY(0) scale(1);
+            transition: transform 4s linear, opacity 4s linear;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container" id="breathing-container">
+        <div id="prompt-message">Tap to start</div>
+        <span id="visual-element-rose" class="visual-element">🌹</span>
+        <div id="visual-element-bubbles" class="bubble-container"></div>
+    </div>
+
+<script>
+    const breathingContainer = document.getElementById('breathing-container');
+    const roseElement = document.getElementById('visual-element-rose');
+    const bubblesContainer = document.getElementById('visual-element-bubbles');
+    const promptMessage = document.getElementById('prompt-message');
+
+    const phases = ['in', 'hold', 'out', 'hold'];
+    const phaseDurations = [4000, 4000, 4000, 4000]; // 4 seconds for each phase
+    let currentPhaseIndex = 0;
+    let timeoutId;
+    let bubbleIntervalId;
+
+    function resetVisuals() {
+        roseElement.classList.remove('rose-in');
+        bubblesContainer.classList.remove('visible');
+        if (bubbleIntervalId) {
+            clearInterval(bubbleIntervalId);
+        }
+    }
+
+    function createBubble() {
+        const bubble = document.createElement('div');
+        const size = Math.random() * 80 + 30; // 30px to 110px
+        bubble.className = 'bubble';
+        bubble.style.width = `${size}px`;
+        bubble.style.height = `${size}px`;
+        bubble.style.left = `${Math.random() * 80 + 10}vw`; // 10% to 90% of viewport width
+        bubble.style.bottom = `-100px`; // Start off-screen
+
+        // Add to the DOM before starting the animation
+        bubblesContainer.appendChild(bubble);
+
+        // Animate the bubble
+        setTimeout(() => {
+            bubble.style.transform = 'translateY(-150vh) scale(0.5)';
+            bubble.style.opacity = '0';
+        }, 100);
+
+        // Remove the bubble after it's finished animating
+        setTimeout(() => {
+            if (bubblesContainer.contains(bubble)) {
+                bubblesContainer.removeChild(bubble);
+            }
+        }, 4000);
+    }
+
+    function animateBreathing() {
+        resetVisuals();
+        const currentPhase = phases[currentPhaseIndex];
+
+        switch (currentPhase) {
+            case 'in':
+                roseElement.classList.add('rose-in');
+                break;
+            case 'hold':
+                // The visual from the 'in' or 'out' phase stays static
+                break;
+            case 'out':
+                bubblesContainer.classList.add('visible');
+                createBubble();
+                bubbleIntervalId = setInterval(createBubble, 500);
+                break;
+        }
+        
+        // Move to the next phase after its duration
+        timeoutId = setTimeout(() => {
+            currentPhaseIndex = (currentPhaseIndex + 1) % phases.length;
+            animateBreathing();
+        }, phaseDurations[currentPhaseIndex]);
+    }
+
+    function startBreathing() {
+        promptMessage.classList.add('hidden');
+        breathingContainer.removeEventListener('click', startBreathing);
+        animateBreathing();
+    }
+
+    // Start the app on a click/tap event
+    breathingContainer.addEventListener('click', startBreathing);
+
+</script>
+
+</body>
+</html>
