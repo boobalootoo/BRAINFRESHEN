@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Hand Model Control</title>
+  <style>
+    /* Remove default body margins and hide overflow to prevent scrollbars */
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Styles for the video background */
+    #video-background {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1; /* Puts the video behind the canvas */
+    }
+
+    /* Make the canvas transparent and non-interactive so clicks go through to the video */
+    canvas {
+      display: block;
+      background-color: transparent;
+      pointer-events: none;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <!-- The video element now has an ID and is visible for the background -->
+  <video id="video-background" autoplay playsinline></video>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script type="module">
+    import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
+    // === Webcam Setup ===
+    const video = document.getElementById("video-background");
+    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+      video.srcObject = stream;
+    }).catch(err => {
+      console.error("Error accessing webcam: ", err);
+      // Fallback message for the user if webcam access fails
+      const fallbackMessage = document.createElement('div');
+      fallbackMessage.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center;';
+      fallbackMessage.innerHTML = '<h2>Webcam access denied.</h2><p>Please grant permission to use the webcam for this application.</p>';
+      document.body.appendChild(fallbackMessage);
+    });
+
+    await new Promise(resolve => video.onloadedmetadata = resolve);
+
+    // === MediaPipe Hand Landmarker ===
+    const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+    const handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task"
+      },
+      runningMode: "VIDEO",
+      numHands: 1
+    });
+
+    // === Three.js Scene Setup ===
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.z = 2;
+
+    // We pass { alpha: true } here to make the canvas background transparent
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Ensure the canvas is positioned over the video
+    renderer.domElement.style.position = 'fixed';
+    renderer.domElement.style.top = '0';
+    renderer.domElement.style.left = '0';
+
+    // Light
+    const light = new THREE.PointLight(0xffffff, 1);
+    light.position.set(0, 0, 2);
+    scene.add(light);
+
+    // Hand Points
+    const points = [];
+    const lines = [];
+
+    for (let i = 0; i < 21; i++) {
+      const geometry = new THREE.SphereGeometry(0.01, 8, 8);
+      const material = new THREE.MeshStandardMaterial({ color: 0x00ffcc });
+      const point = new THREE.Mesh(geometry, material);
+      scene.add(point);
+      points.push(point);
+    }
+
+    // Hand Bones (by connecting joints)
+    const connections = [
+      [0,1],[1,2],[2,3],[3,4],      // Thumb
+      [0,5],[5,6],[6,7],[7,8],      // Index
+      [0,9],[9,10],[10,11],[11,12],// Middle
+      [0,13],[13,14],[14,15],[15,16], // Ring
+      [0,17],[17,18],[18,19],[19,20]  // Pinky
+    ];
+
+    for (const [start, end] of connections) {
+      const material = new THREE.LineBasicMaterial({ color: 0xffffff });
+      const geometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(), new THREE.Vector3()
+      ]);
+      const line = new THREE.Line(geometry, material);
+      scene.add(line);
+      lines.push(line);
+    }
+
+    // Handle window resizing
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // === Animation Loop ===
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+
+      const nowInMs = performance.now();
+      const results = handLandmarker.detectForVideo(video, nowInMs);
+
+      if (results.landmarks.length > 0) {
+        const lm = results.landmarks[0];
+
+        for (let i = 0; i < 21; i++) {
+          const x = (lm[i].x - 0.5) * 2; // normalize
+          const y = -(lm[i].y - 0.5) * 2;
+          const z = -lm[i].z * 0.5;
+
+          points[i].position.set(x, y, z);
+        }
+
+        for (let j = 0; j < connections.length; j++) {
+          const [start, end] = connections[j];
+          const line = lines[j];
+          const pos = line.geometry.attributes.position;
+          pos.setXYZ(0, points[start].position.x, points[start].position.y, points[start].position.z);
+          pos.setXYZ(1, points[end].position.x, points[end].position.y, points[end].position.z);
+          pos.needsUpdate = true;
+        }
+      }
+    }
+
+    animate();
+  </script>
+</body>
+</html>
+
