@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Hand Model Control</title>
+  <style>
+    /* Remove default body margins and hide overflow to prevent scrollbars */
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Styles for the video background */
+    #video-background {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1; /* Puts the video behind the canvas */
+    }
+
+    /* Make the canvas transparent and non-interactive so clicks go through to the video */
+    canvas {
+      display: block;
+      background-color: transparent;
+      pointer-events: none;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Styles for the images themselves */
+    .overlay-image {
+      position: fixed;
+      width: 30vw;
+      height: 30vh;
+      object-fit: contain;
+      opacity: 0;
+      transition: opacity 1s ease-in-out;
+      transform: translate(-50%, -50%); /* Centers the image on its random top/left coordinates */
+    }
+
+    .overlay-image.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <!-- The video element now has an ID and is visible for the background -->
+  <video id="video-background" autoplay playsinline></video>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script type="module">
+    import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
+    // === Webcam Setup ===
+    const video = document.getElementById("video-background");
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(stream => {
+      video.srcObject = stream;
+    }).catch(err => {
+      console.error("Error accessing webcam: ", err);
+      const fallbackMessage = document.createElement('div');
+      fallbackMessage.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center;';
+      fallbackMessage.innerHTML = '<h2>Webcam access denied.</h2><p>Please grant permission to use the webcam for this application.</p>';
+      document.body.appendChild(fallbackMessage);
+    });
+
+    await new Promise(resolve => video.onloadedmetadata = resolve);
+
+    // === MediaPipe Hand Landmarker ===
+    const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+    const handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task"
+      },
+      runningMode: "VIDEO",
+      numHands: 1
+    });
+
+    // === Three.js Scene Setup ===
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.z = 2;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    renderer.domElement.style.position = 'fixed';
+    renderer.domElement.style.top = '0';
+    renderer.domElement.style.left = '0';
+
+    // Light
+    const light = new THREE.PointLight(0xffffff, 1);
+    light.position.set(0, 0, 2);
+    scene.add(light);
+
+    // Hand Points
+    const points = [];
+    const lines = [];
+
+    for (let i = 0; i < 21; i++) {
+      const geometry = new THREE.SphereGeometry(0.01, 8, 8);
+      const material = new THREE.MeshStandardMaterial({ color: 0x00ffcc });
+      const point = new THREE.Mesh(geometry, material);
+      scene.add(point);
+      points.push(point);
+    }
+
+    // Hand Bones (by connecting joints)
+    const connections = [
+      [0,1],[1,2],[2,3],[3,4],
+      [0,5],[5,6],[6,7],[7,8],
+      [0,9],[9,10],[10,11],[11,12],
+      [0,13],[13,14],[14,15],[15,16],
+      [0,17],[17,18],[18,19],[19,20]
+    ];
+
+    for (const [start, end] of connections) {
+      const material = new THREE.LineBasicMaterial({ color: 0xffffff });
+      const geometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(), new THREE.Vector3()
+      ]);
+      const line = new THREE.Line(geometry, material);
+      scene.add(line);
+      lines.push(line);
+    }
+
+    // Handle window resizing
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // === Text-to-Speech Setup ===
+    const synth = window.speechSynthesis;
+    let lastSpokenFileName = null;
+    let spokenTimeout = null;
+
+    function getFileName(url) {
+      const parts = url.split('/');
+      const fileNameWithExt = parts[parts.length - 1];
+      const fileName = fileNameWithExt.split('.')[0];
+      // Remove any non-alphabetic characters (like numbers)
+      return fileName.replace(/[^a-zA-Z]/g, '');
+    }
+
+    function speakFileName(fileName) {
+      if (synth.speaking || lastSpokenFileName === fileName) {
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(fileName);
+      utterance.lang = 'en-US';
+      utterance.pitch = 1;
+      utterance.rate = 1;
+      synth.speak(utterance);
+      lastSpokenFileName = fileName;
+      // Reset the last spoken filename after a short delay
+      clearTimeout(spokenTimeout);
+      spokenTimeout = setTimeout(() => {
+        lastSpokenFileName = null;
+      }, 2000);
+    }
+
+    // === Animation Loop ===
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+
+      const nowInMs = performance.now();
+      const results = handLandmarker.detectForVideo(video, nowInMs);
+
+      if (results.landmarks.length > 0) {
+        const lm = results.landmarks[0];
+
+        for (let i = 0; i < 21; i++) {
+          const x = (lm[i].x - 0.5) * 2;
+          const y = -(lm[i].y - 0.5) * 2;
+          const z = -lm[i].z * 0.5;
+
+          points[i].position.set(x, y, z);
+        }
+
+        for (let j = 0; j < connections.length; j++) {
+          const [start, end] = connections[j];
+          const line = lines[j];
+          const pos = line.geometry.attributes.position;
+          pos.setXYZ(0, points[start].position.x, points[start].position.y, points[start].position.z);
+          pos.setXYZ(1, points[end].position.x, points[end].position.y, points[end].position.z);
+          pos.needsUpdate = true;
+        }
+
+        // Get the 2D position of the index finger tip on the screen
+        const indexTip = points[8].position;
+        const vector = new THREE.Vector3(indexTip.x, indexTip.y, indexTip.z);
+        vector.project(camera);
+        const screenX = (vector.x + 1) / 2 * window.innerWidth;
+        const screenY = (1 - vector.y) / 2 * window.innerHeight;
+
+        // Get the list of all active overlay images
+        const activeImages = document.querySelectorAll('.overlay-image.visible');
+
+        // Check if any active image is being pointed at
+        for (const img of activeImages) {
+          const rect = img.getBoundingClientRect();
+
+          // Check for collision
+          if (screenX > rect.left && screenX < rect.right && screenY > rect.top && screenY < rect.bottom) {
+            const fileName = img.dataset.filename;
+            speakFileName(fileName);
+            break; // Stop checking after the first collision is found
+          }
+        }
+      }
+    }
+
+    animate();
+
+    // === Image Overlay Logic (Dynamic Fetch & Non-Overlapping) ===
+    let imageUrls = [];
+    let currentImageIndex = 0;
+
+    const positions = [
+      { top: '20%', left: '20%' }, { top: '20%', left: '50%' }, { top: '20%', left: '80%' },
+      { top: '50%', left: '20%' }, { top: '50%', left: '50%' }, { top: '50%', left: '80%' },
+      { top: '80%', left: '20%' }, { top: '80%', left: '50%' }, { top: '80%', left: '80%' },
+    ];
+    let availablePositions = [...positions];
+
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    async function fetchGifs() {
+      const repoUrl = "https://api.github.com/repos/boobalootoo/BRAINFRESHEN/contents/GIFS/WHEEL";
+      try {
+        const response = await fetch(repoUrl);
+        const data = await response.json();
+        const gifUrls = data
+          .filter(file => file.name.endsWith(".gif"))
+          .map(file => file.download_url);
+        return shuffleArray(gifUrls);
+      } catch (error) {
+        console.error("Failed to fetch GIFs:", error);
+        return [];
+      }
+    }
+
+    function showNextImage() {
+      if (imageUrls.length === 0 || availablePositions.length === 0) {
+        return;
+      }
+
+      const newImage = document.createElement('img');
+      newImage.src = imageUrls[currentImageIndex];
+      newImage.alt = `Farm Image ${currentImageIndex + 1}`;
+      newImage.classList.add('overlay-image');
+      newImage.dataset.filename = getFileName(imageUrls[currentImageIndex]);
+
+      const positionIndex = Math.floor(Math.random() * availablePositions.length);
+      const chosenPosition = availablePositions.splice(positionIndex, 1)[0];
+
+      newImage.style.top = chosenPosition.top;
+      newImage.style.left = chosenPosition.left;
+
+      document.body.appendChild(newImage);
+
+      setTimeout(() => newImage.classList.add('visible'), 50);
+
+      const imageWithPosition = { image: newImage, position: chosenPosition };
+
+      setTimeout(() => {
+        newImage.classList.remove('visible');
+        setTimeout(() => {
+          newImage.remove();
+          availablePositions.push(chosenPosition);
+        }, 1000);
+      }, 13000);
+
+      currentImageIndex = (currentImageIndex + 1) % imageUrls.length;
+    }
+
+    fetchGifs().then(urls => {
+      imageUrls = urls;
+      if (imageUrls.length > 0) {
+        setInterval(showNextImage, 3000);
+      } else {
+        console.warn("No GIFs found in the repository.");
+      }
+    });
+  </script>
+</body>
+</html>
