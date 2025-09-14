@@ -118,10 +118,14 @@
     <button class="category-button" onclick="setGifCategory('zoo')">
       <span role="img" aria-label="zoo">🦁</span>
     </button>
+    <button class="category-button" onclick="setGifCategory('music')">
+      <span role="img" aria-label="music">🎵</span>
+    </button>
     <button class="category-button" onclick="setGifCategory('all')">
       <div class="all-emojis-grid" role="img" aria-label="all">
         <span>🐄</span><span>🦖</span>
         <span>🛞</span><span>🦁</span>
+        <span>🎵</span>
       </div>
     </button>
   </div>
@@ -335,8 +339,10 @@
         folderUrls = ['ZOO'];
       } else if (category === 'wheel') {
         folderUrls = ['WHEEL'];
+      } else if (category === 'music') {
+        folderUrls = ['MUSIC'];
       } else if (category === 'all') {
-        folderUrls = ['DINO', 'FARM', 'ZOO', 'WHEEL'];
+        folderUrls = ['DINO', 'FARM', 'ZOO', 'WHEEL', 'MUSIC'];
       }
 
       const gifUrls = await fetchFiles(folderUrls, '.gif');
