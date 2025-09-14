@@ -110,32 +110,48 @@
     video.addEventListener('loadeddata', resizeCanvas);
     window.addEventListener('resize', resizeCanvas);
 
-    // === Text-to-Speech Setup ===
+    // === Text-to-Speech & Audio Setup ===
     const synth = window.speechSynthesis;
-    let lastSpokenFileName = null;
-    let spokenTimeout = null;
+    let currentAudio = null;
+    let currentlyCollidingFileName = null;
+    let isSpeaking = false;
 
     function getFileName(url) {
       const parts = url.split('/');
       const fileNameWithExt = parts[parts.length - 1];
-      const fileName = fileNameWithExt.split('.')[0];
+      const fileName = fileNameWithExt.split('.')[0].replace(/[0-9]/g, ''); // Remove numbers
       return fileName.replace(/[^a-zA-Z]/g, '');
     }
 
-    function speakFileName(fileName) {
-      if (synth.speaking || lastSpokenFileName === fileName) {
-        return;
+    function speakAndPlay(fileName) {
+      if (isSpeaking) return;
+
+      isSpeaking = true;
+      
+      // Stop any existing audio
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
       }
+
       const utterance = new SpeechSynthesisUtterance(fileName);
       utterance.lang = 'en-US';
+      utterance.onend = () => {
+        // After speaking, play the sound
+        const sfxUrl = sfxMap[fileName];
+        if (sfxUrl) {
+          currentAudio = new Audio(sfxUrl);
+          currentAudio.loop = true;
+          currentAudio.dataset.filename = fileName;
+          currentAudio.play().catch(e => console.error("Audio playback failed:", e));
+        }
+        isSpeaking = false;
+      };
+      
       synth.speak(utterance);
-      lastSpokenFileName = fileName;
-      clearTimeout(spokenTimeout);
-      spokenTimeout = setTimeout(() => {
-        lastSpokenFileName = null;
-      }, 2000);
     }
-
+    
     // === Animation Loop ===
     function animate() {
       requestAnimationFrame(animate);
@@ -145,6 +161,8 @@
 
       const nowInMs = performance.now();
       const results = handLandmarker.detectForVideo(video, nowInMs);
+
+      let collisionDetected = false;
 
       if (results.landmarks.length > 0) {
         statusMessage.textContent = "Hand Detected";
@@ -166,20 +184,41 @@
         for (const img of activeImages) {
           const rect = img.getBoundingClientRect();
           if (screenX > rect.left && screenX < rect.right && screenY > rect.top && screenY < rect.bottom) {
+            collisionDetected = true;
             const fileName = img.dataset.filename;
-            speakFileName(fileName);
+
+            // Only trigger if a new file is being touched and we aren't already speaking
+            if (currentlyCollidingFileName !== fileName) {
+              currentlyCollidingFileName = fileName;
+              speakAndPlay(fileName);
+            }
             break;
           }
         }
       } else {
         statusMessage.textContent = "Hand Not Detected";
       }
+
+      // Stop the audio and reset state if no collision is detected
+      if (!collisionDetected) {
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio.currentTime = 0;
+          currentAudio = null;
+        }
+        currentlyCollidingFileName = null;
+        // Also stop any ongoing speech
+        if (synth.speaking && !isSpeaking) {
+            synth.cancel();
+        }
+      }
     }
 
     animate();
 
-    // === Image Overlay Logic (Dynamic Fetch & Non-Overlapping) ===
+    // === Image and SFX Overlay Logic (Dynamic Fetch & Non-Overlapping) ===
     let imageUrls = [];
+    let sfxMap = {};
     let currentImageIndex = 0;
 
     const positions = [
@@ -197,19 +236,18 @@
       return array;
     }
 
-    async function fetchGifs() {
-      const repoUrl = "https://api.github.com/repos/boobalootoo/BRAINFRESHEN/contents/GIFS/FARM";
-      try {
-        const response = await fetch(repoUrl);
-        const data = await response.json();
-        const gifUrls = data
-          .filter(file => file.name.endsWith(".gif"))
-          .map(file => file.download_url);
-        return shuffleArray(gifUrls);
-      } catch (error) {
-        console.error("Failed to fetch GIFs:", error);
-        return [];
-      }
+    async function fetchFiles(url, fileType) {
+        const repoUrl = `https://api.github.com/repos/boobalootoo/BRAINFRESHEN/contents/GIFS/${url}`;
+        try {
+            const response = await fetch(repoUrl);
+            const data = await response.json();
+            return data
+                .filter(file => file.name.endsWith(fileType))
+                .map(file => file.download_url);
+        } catch (error) {
+            console.error(`Failed to fetch ${fileType}s:`, error);
+            return [];
+        }
     }
 
     function showNextImage() {
@@ -244,8 +282,17 @@
       currentImageIndex = (currentImageIndex + 1) % imageUrls.length;
     }
 
-    fetchGifs().then(urls => {
-      imageUrls = urls;
+    Promise.all([
+      fetchFiles('FARM', '.gif'),
+      fetchFiles('SFX', '.mp3'),
+      fetchFiles('SFX', '.wav')
+    ]).then(([gifUrls, mp3Urls, wavUrls]) => {
+      imageUrls = shuffleArray(gifUrls);
+      const sfxUrls = mp3Urls.concat(wavUrls);
+      sfxUrls.forEach(url => {
+        const fileName = getFileName(url);
+        sfxMap[fileName] = url;
+      });
       if (imageUrls.length > 0) {
         setInterval(showNextImage, 3000);
       } else {
