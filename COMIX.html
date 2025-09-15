@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Comic Book Creator</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      height: 100vh;
+    }
+    .workspace {
+      flex: 1;
+      display: flex;
+      justify-content: space-between;
+    }
+    .sidebar, .options {
+      width: 180px;
+      background: #eee;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: white;
+      position: relative;
+    }
+    #canvas {
+      border: 1px solid #aaa;
+      background: white;
+      margin: 10px;
+      cursor: crosshair;
+    }
+    button {
+      margin: 5px 0;
+      width: 100%;
+    }
+    .bubble {
+      position: absolute;
+      border: 2px solid black;
+      border-radius: 20px;
+      padding: 10px;
+      background: white;
+      cursor: move;
+      resize: both;
+      overflow: auto;
+    }
+    .panel {
+      position: absolute;
+      border: 2px solid black;
+      background: transparent;
+      resize: both;
+      overflow: hidden;
+      cursor: move;
+    }
+    #timeline {
+      height: 120px;
+      background: #ddd;
+      display: flex;
+      align-items: center;
+      overflow-x: auto;
+      padding: 10px;
+    }
+    .thumb {
+      border: 2px solid black;
+      background: white;
+      margin: 5px;
+      width: 100px;
+      height: 100px;
+      flex-shrink: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .thumb.active {
+      border: 3px solid red;
+    }
+  </style>
+</head>
+<body>
+  <div class="workspace">
+    <!-- Left sidebar -->
+    <div class="sidebar">
+      <h3>Characters</h3>
+      <button onclick="addSkeleton()">Add Character</button>
+      <button onclick="removeSkeleton()">Remove Character</button>
+      <button onclick="savePose()">Save Pose</button>
+      <button onclick="loadPose()">Load Pose</button>
+    </div>
+
+    <!-- Main canvas -->
+    <div class="main">
+      <canvas id="canvas" width="600" height="600"></canvas>
+      <button onclick="downloadPage()">Download Page</button>
+    </div>
+
+    <!-- Right sidebar -->
+    <div class="options">
+      <h3>Panels</h3>
+      <button onclick="addPanel()">Add Panel</button>
+      <h3>Speech</h3>
+      <button onclick="addBubble()">Add Speech Bubble</button>
+      <h3>Background</h3>
+      <input type="file" id="bgUpload">
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div id="timeline">
+    <button onclick="newFrame()">+ Add Frame</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    let dragging = null;
+    let selectedSkeleton = 0;
+    let frames = [];
+    let currentFrame = 0;
+
+    // Frame structure
+    function newFrameData() {
+      return {
+        skeletons: [skeletonTemplate()],
+        background: null,
+        bubbles: [],
+        panels: []
+      };
+    }
+
+    // Skeleton template
+    function skeletonTemplate() {
+      return {
+        joints: [
+          {x: 300, y: 100}, // head
+          {x: 300, y: 160}, // chest
+          {x: 300, y: 250}, // hips
+          {x: 250, y: 160}, // left shoulder
+          {x: 200, y: 220}, // left elbow
+          {x: 180, y: 300}, // left hand
+          {x: 350, y: 160}, // right shoulder
+          {x: 400, y: 220}, // right elbow
+          {x: 420, y: 300}, // right hand
+          {x: 270, y: 250}, // left knee
+          {x: 270, y: 350}, // left foot
+          {x: 330, y: 250}, // right knee
+          {x: 330, y: 350}  // right foot
+        ],
+        bones: [
+          [0,1],[1,2],
+          [1,3],[3,4],[4,5],
+          [1,6],[6,7],[7,8],
+          [2,9],[9,10],
+          [2,11],[11,12]
+        ]
+      };
+    }
+
+    // Init
+    frames.push(newFrameData());
+    renderTimeline();
+    drawAll();
+
+    // Drawing functions
+    function drawAll() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const frame = frames[currentFrame];
+      if (frame.background) ctx.drawImage(frame.background,0,0,canvas.width,canvas.height);
+      frame.skeletons.forEach((skel,i)=>{
+        drawSkeleton(skel, i===selectedSkeleton ? "blue":"black");
+      });
+    }
+
+    function drawSkeleton(skel, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      skel.bones.forEach(([a,b]) => {
+        ctx.beginPath();
+        ctx.moveTo(skel.joints[a].x, skel.joints[a].y);
+        ctx.lineTo(skel.joints[b].x, skel.joints[b].y);
+        ctx.stroke();
+      });
+      ctx.fillStyle = "red";
+      skel.joints.forEach(j => {
+        ctx.beginPath();
+        ctx.arc(j.x, j.y, 6, 0, Math.PI*2);
+        ctx.fill();
+      });
+    }
+
+    function getJointAt(x,y) {
+      const skel = frames[currentFrame].skeletons[selectedSkeleton];
+      return skel.joints.findIndex(j => Math.hypot(j.x-x, j.y-y) < 10);
+    }
+
+    // Mouse events
+    canvas.addEventListener("mousedown", e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      dragging = getJointAt(x,y);
+    });
+    canvas.addEventListener("mousemove", e => {
+      if (dragging !== null) {
+        const rect = canvas.getBoundingClientRect();
+        frames[currentFrame].skeletons[selectedSkeleton].joints[dragging].x = e.clientX - rect.left;
+        frames[currentFrame].skeletons[selectedSkeleton].joints[dragging].y = e.clientY - rect.top;
+        drawAll();
+      }
+    });
+    canvas.addEventListener("mouseup", () => dragging = null);
+
+    // Character controls
+    function addSkeleton(){ frames[currentFrame].skeletons.push(skeletonTemplate()); drawAll(); }
+    function removeSkeleton(){ if(frames[currentFrame].skeletons.length>1){ frames[currentFrame].skeletons.pop(); drawAll(); } }
+
+    function savePose() {
+      const data = JSON.stringify(frames[currentFrame].skeletons);
+      localStorage.setItem("pose", data);
+      alert("Pose saved!");
+    }
+    function loadPose() {
+      const data = localStorage.getItem("pose");
+      if (data) {
+        frames[currentFrame].skeletons = JSON.parse(data);
+        drawAll();
+      }
+    }
+
+    // Speech bubbles & panels
+    function addBubble() {
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.contentEditable = true;
+      bubble.innerText = "Speech...";
+      bubble.style.left = "200px";
+      bubble.style.top = "200px";
+      document.body.appendChild(bubble);
+      frames[currentFrame].bubbles.push(bubble);
+      dragElement(bubble);
+    }
+    function addPanel() {
+      const panel = document.createElement("div");
+      panel.className = "panel";
+      panel.style.left = "100px";
+      panel.style.top = "100px";
+      panel.style.width = "200px";
+      panel.style.height = "200px";
+      document.body.appendChild(panel);
+      frames[currentFrame].panels.push(panel);
+      dragElement(panel);
+    }
+
+    function dragElement(el) {
+      let offsetX=0, offsetY=0, dragging=false;
+      el.addEventListener("mousedown", e=>{
+        dragging = true;
+        offsetX = e.offsetX;
+        offsetY = e.offsetY;
+      });
+      document.addEventListener("mousemove", e=>{
+        if(dragging){
+          el.style.left = (e.pageX-offsetX)+"px";
+          el.style.top = (e.pageY-offsetY)+"px";
+        }
+      });
+      document.addEventListener("mouseup", ()=> dragging=false);
+    }
+
+    // Background upload
+    document.getElementById("bgUpload").addEventListener("change", e=>{
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function(ev){
+        const img = new Image();
+        img.onload = ()=>{
+          frames[currentFrame].background = img;
+          drawAll();
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Timeline
+    function newFrame(){
+      frames.push(newFrameData());
+      currentFrame = frames.length-1;
+      renderTimeline();
+      drawAll();
+    }
+
+    function renderTimeline() {
+      const timeline = document.getElementById("timeline");
+      timeline.innerHTML = '<button onclick="newFrame()">+ Add Frame</button>';
+      frames.forEach((f,i)=>{
+        const thumb = document.createElement("div");
+        thumb.className = "thumb"+(i===currentFrame?" active":"");
+        thumb.innerText = "Frame "+(i+1);
+        thumb.onclick = ()=>{ currentFrame=i; renderTimeline(); drawAll(); };
+        timeline.appendChild(thumb);
+      });
+    }
+
+    // Download all frames into one canvas
+    function downloadPage() {
+      const fullCanvas = document.createElement("canvas");
+      fullCanvas.width = canvas.width * frames.length;
+      fullCanvas.height = canvas.height;
+      const fullCtx = fullCanvas.getContext("2d");
+
+      frames.forEach((frame,i)=>{
+        if (frame.background) fullCtx.drawImage(frame.background,i*canvas.width,0,canvas.width,canvas.height);
+        frame.skeletons.forEach(skel=>drawSkeletonExport(fullCtx, skel, i*canvas.width));
+      });
+
+      const link = document.createElement("a");
+      link.download = "comic_page.png";
+      link.href = fullCanvas.toDataURL();
+      link.click();
+    }
+
+    function drawSkeletonExport(ctx, skel, offsetX) {
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 3;
+      skel.bones.forEach(([a,b]) => {
+        ctx.beginPath();
+        ctx.moveTo(skel.joints[a].x+offsetX, skel.joints[a].y);
+        ctx.lineTo(skel.joints[b].x+offsetX, skel.joints[b].y);
+        ctx.stroke();
+      });
+      ctx.fillStyle = "red";
+      skel.joints.forEach(j => {
+        ctx.beginPath();
+        ctx.arc(j.x+offsetX, j.y, 6, 0, Math.PI*2);
+        ctx.fill();
+      });
+    }
+  </script>
+</body>
+</html>
