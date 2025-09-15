@@ -52,7 +52,7 @@
         import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
         // Constants
-        const LERP_FACTOR = 0.08;
+        const LERP_FACTOR = 0.5; // Increased this value for more responsive tracking
         const MAGNIFIER_SCALE_MIN = 0.5;
         const MAGNIFIER_SCALE_MAX = 1.5;
         const ZOOM_MAX = 4.0; // Max zoom level
@@ -133,11 +133,11 @@
                     const wrist = lm[0];
                     const fingertip = lm[12]; // middle fingertip
 
-                    // Position (use wrist)
-                    const normalizedDeviceX = (wrist.x - 0.5) * 2;
-                    const normalizedDeviceY = -(wrist.y - 0.5) * 2;
-                    const screenToWorld = new THREE.Vector3(normalizedDeviceX, normalizedDeviceY, 0).unproject(camera);
-                    targetPosition.set(screenToWorld.x, screenToWorld.y, -wrist.z * 0.5);
+                    // Use a simpler mapping from normalized coordinates to screen space
+                    const x = (wrist.x - 0.5) * 2 * camera.aspect;
+                    const y = -(wrist.y - 0.5) * 2;
+                    const z = -wrist.z * 0.5;
+                    targetPosition.set(x, y, z);
 
                     // Hand size (distance wrist ↔ middle fingertip in normalized coords)
                     const dx = wrist.x - fingertip.x;
