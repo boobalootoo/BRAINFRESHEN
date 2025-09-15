@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+    <title>Square Camera View</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: black;
+            font-family: sans-serif;
+            color: white;
+            text-align: center;
+        }
+        #video-background {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: auto;
+            height: auto;
+            transform: translate(-50%, -50%);
+            z-index: -1;
+        }
+        canvas {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        #error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            display: none;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            z-index: 100;
+        }
+        .zoom-button {
+            padding: 8px 12px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+        .zoom-button:hover {
+            background-color: #555;
+        }
+    </style>
+</head>
+<body>
+    <video id="video-background" autoplay playsinline></video>
+    <div id="error-message"></div>
+
+    <div id="controls">
+        <button class="zoom-button" data-zoom="1">1x</button>
+        <button class="zoom-button" data-zoom="2">2x</button>
+        <button class="zoom-button" data-zoom="3">3x</button>
+        <button class="zoom-button" data-zoom="4">4x</button>
+        <button class="zoom-button" data-zoom="5">5x</button>
+        <button class="zoom-button" data-zoom="6">6x</button>
+        <button class="zoom-button" data-zoom="7">7x</button>
+        <button class="zoom-button" data-zoom="8">8x</button>
+        <button class="zoom-button" data-zoom="9">9x</button>
+        <button class="zoom-button" data-zoom="10">10x</button>
+    </div>
+
+    <!-- Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script type="module">
+        // === Camera and Video setup ===
+        const video = document.getElementById("video-background");
+        const errorMessageDiv = document.getElementById("error-message");
+        const controls = document.getElementById("controls");
+        let currentZoomLevel = 1;
+
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+                await new Promise(r => video.onloadedmetadata = r);
+            } catch (err) {
+                errorMessageDiv.style.display = 'block';
+                errorMessageDiv.textContent = "Camera access denied. Please grant permission.";
+                console.error("Camera access error:", err);
+            }
+        }
+
+        // === Three.js setup ===
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
+        camera.position.z = 1;
+
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        document.body.appendChild(renderer.domElement);
+
+        function resizeRendererToDisplaySize() {
+            const canvas = renderer.domElement;
+            const size = Math.min(window.innerWidth, window.innerHeight);
+            if (canvas.width !== size || canvas.height !== size) {
+                renderer.setSize(size, size);
+                return true;
+            }
+            return false;
+        }
+        
+        // === Create the magnifying glass ===
+        function createMagnifier(zoomLevel) {
+            const ringGeom = new THREE.TorusGeometry(0.8, 0.08, 16, 100);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x555555, transparent: false, opacity: 1.0 });
+            const ring = new THREE.Mesh(ringGeom, ringMat);
+
+            const videoTex = new THREE.VideoTexture(video);
+            videoTex.minFilter = THREE.LinearFilter;
+            videoTex.matrixAutoUpdate = false;
+
+            const lensGeom = new THREE.CircleGeometry(0.8, 64);
+            const lensMat = new THREE.MeshBasicMaterial({ map: videoTex, transparent: false, opacity: 1.0 });
+            const lens = new THREE.Mesh(lensGeom, lensMat);
+
+            const uvCenter = new THREE.Vector2(0.5, 0.5);
+
+            // Use the texture matrix to apply the zoom and keep it centered
+            videoTex.matrix.identity()
+                .translate(-uvCenter.x, -uvCenter.y)
+                .scale(1 / zoomLevel, 1 / zoomLevel)
+                .translate(uvCenter.x, uvCenter.y);
+
+            const magnifier = new THREE.Group();
+            magnifier.add(ring);
+            magnifier.add(lens);
+            
+            return magnifier;
+        }
+
+        // Initial creation of magnifier
+        let magnifier = createMagnifier(currentZoomLevel);
+        scene.add(magnifier);
+
+        // Event listener for buttons
+        controls.addEventListener('click', (event) => {
+            if (event.target.classList.contains('zoom-button')) {
+                const newZoom = parseFloat(event.target.dataset.zoom);
+                if (newZoom !== currentZoomLevel) {
+                    currentZoomLevel = newZoom;
+                    // Remove the old magnifier
+                    scene.remove(magnifier);
+                    // Create and add the new one with the updated zoom level
+                    magnifier = createMagnifier(currentZoomLevel);
+                    scene.add(magnifier);
+                }
+            }
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            resizeRendererToDisplaySize();
+            renderer.render(scene, camera);
+        }
+
+        (async () => {
+            await setupCamera();
+            if (video.srcObject) {
+                animate();
+            }
+        })();
+    </script>
+</body>
+</html>
