@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+    <title>Hand Magnifying Glass</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: black;
+            font-family: sans-serif;
+            color: white;
+            text-align: center;
+        }
+        #video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -1;
+        }
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <video id="video-background" autoplay playsinline></video>
+    <div id="error-message"></div>
+
+    <!-- Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script type="module">
+        import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
+        // Constants
+        const LERP_FACTOR = 0.08;
+        const MAGNIFIER_SCALE_MIN = 0.5;
+        const MAGNIFIER_SCALE_MAX = 1.5;
+        const ZOOM_MAX = 4.0; // Max zoom level
+        const ZOOM_MIN = 1.0; // Min zoom level (no zoom)
+
+        // === Camera and Hand Tracking setup ===
+        const video = document.getElementById("video-background");
+        const errorMessageDiv = document.getElementById("error-message");
+
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+                await new Promise(r => video.onloadedmetadata = r);
+            } catch (err) {
+                errorMessageDiv.style.display = 'block';
+                errorMessageDiv.textContent = "Camera access denied. Please grant permission.";
+                console.error("Camera access error:", err);
+            }
+        }
+
+        async function createHandLandmarker() {
+            const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+            return await HandLandmarker.createFromOptions(vision, {
+                baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task" },
+                runningMode: "VIDEO",
+                numHands: 1
+            });
+        }
+
+        // === Three.js setup ===
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1000);
+        camera.position.z = 2;
+
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(innerWidth, innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        window.addEventListener("resize", () => {
+            camera.aspect = innerWidth / innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(innerWidth, innerHeight);
+        });
+
+        // === Magnifying glass ===
+        const ringGeom = new THREE.TorusGeometry(0.5, 0.08, 16, 100);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const ring = new THREE.Mesh(ringGeom, ringMat);
+
+        // Glass lens (shows zoomed video)
+        const videoTex = new THREE.VideoTexture(video);
+        videoTex.minFilter = THREE.LinearFilter;
+        videoTex.matrixAutoUpdate = false;
+        const lensGeom = new THREE.CircleGeometry(0.5, 64);
+        const lensMat = new THREE.MeshBasicMaterial({ map: videoTex, transparent: false, opacity: 1.0 });
+        const lens = new THREE.Mesh(lensGeom, lensMat);
+
+        const magnifier = new THREE.Group();
+        magnifier.add(ring);
+        magnifier.add(lens);
+        scene.add(magnifier);
+
+        // State for smoothing
+        const targetPosition = new THREE.Vector3();
+
+        (async () => {
+            await setupCamera();
+            const handLandmarker = await createHandLandmarker();
+
+            function animate() {
+                requestAnimationFrame(animate);
+
+                const results = handLandmarker.detectForVideo(video, performance.now());
+
+                if (results.landmarks.length > 0) {
+                    const lm = results.landmarks[0];
+                    const wrist = lm[0];
+                    const fingertip = lm[12]; // middle fingertip
+
+                    // Position (use wrist)
+                    const normalizedDeviceX = (wrist.x - 0.5) * 2;
+                    const normalizedDeviceY = -(wrist.y - 0.5) * 2;
+                    const screenToWorld = new THREE.Vector3(normalizedDeviceX, normalizedDeviceY, 0).unproject(camera);
+                    targetPosition.set(screenToWorld.x, screenToWorld.y, -wrist.z * 0.5);
+
+                    // Hand size (distance wrist ↔ middle fingertip in normalized coords)
+                    const dx = wrist.x - fingertip.x;
+                    const dy = wrist.y - fingertip.y;
+                    const handSize = Math.sqrt(dx * dx + dy * dy);
+
+                    // Map hand size to magnifier scale
+                    const scaleFactor = THREE.MathUtils.clamp(handSize * 6.0, 0.2, 3.0);
+                    magnifier.scale.setScalar(scaleFactor);
+
+                    // Calculate zoom based on the current scaleFactor
+                    // Invert the scale to get the zoom amount (more zoom when smaller)
+                    const normalizedScale = (scaleFactor - 0.2) / (3.0 - 0.2);
+                    const zoom = THREE.MathUtils.lerp(ZOOM_MAX, ZOOM_MIN, normalizedScale);
+
+                    // Update texture matrix to show only a cropped, zoomed portion of the video
+                    const uvCenter = new THREE.Vector2(wrist.x, 1 - wrist.y);
+                    videoTex.matrix.identity()
+                        .translate(-uvCenter.x, -uvCenter.y)
+                        .scale(1 / zoom, 1 / zoom)
+                        .translate(uvCenter.x, uvCenter.y);
+                }
+
+                // Smooth motion
+                magnifier.position.lerp(targetPosition, LERP_FACTOR);
+
+                renderer.render(scene, camera);
+                if (video.srcObject) {
+                    videoTex.needsUpdate = true;
+                }
+            }
+
+            if (video.srcObject) {
+                animate();
+            }
+        })();
+    </script>
+</body>
+</html>
