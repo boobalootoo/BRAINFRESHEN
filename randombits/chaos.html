@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GIF Gallery with Square</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: white;
+      height: 100vh;
+      overflow: hidden; /* Prevent scrolling */
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Start screen overlay */
+    #start-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      transition: opacity 0.5s ease;
+    }
+
+    #start-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #start-button {
+      padding: 15px 30px;
+      font-size: 1.5em;
+      border: 2px solid white;
+      background: transparent;
+      color: white;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.2s;
+    }
+    
+    #start-button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    #start-button:active {
+      transform: scale(0.95);
+    }
+
+    #gallery {
+      position: relative;
+      flex: 1;
+      width: 100vw;
+      overflow: hidden;
+    }
+
+    .gif-wrapper {
+      position: absolute;
+      cursor: pointer;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: transform 0.3s ease;
+    }
+
+    .gif-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    .gif-wrapper:hover {
+      transform: scale(1.05);
+    }
+    
+    .circle {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    #square {
+      width: 150px;
+      height: 150px;
+      background: #f0f0f0;
+      border: 2px solid #ccc;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      cursor: pointer;
+      z-index: 60;
+      margin-bottom: 20px; /* Add margin to separate from buttons */
+    }
+    
+    #square img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    /* Collapsible buttons section */
+    #button-container {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 95vw;
+      z-index: 70;
+    }
+
+    #category-buttons {
+      display: flex;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 6px 10px;
+      border-radius: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      overflow: hidden;
+      max-height: 100vh;
+      transition: max-height 0.5s ease-in-out, opacity 0.5s ease-in-out;
+      opacity: 1;
+      margin-bottom: 8px;
+    }
+
+    #category-buttons.collapsed {
+      max-height: 0;
+      opacity: 0;
+      padding: 0 10px;
+      margin-bottom: 0;
+    }
+    
+    #toggle-button-container {
+      display: flex;
+      justify-content: center;
+    }
+
+    #toggle-button {
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .category-button {
+      background: rgba(255, 255, 255, 0.15);
+      border: none;
+      padding: 8px;
+      border-radius: 10px;
+      font-size: clamp(20px, 8vw, 28px);
+      cursor: pointer;
+      transition: transform 0.2s, background-color 0.2s;
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .all-emojis-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1px;
+      font-size: 0.8em;
+    }
+  </style>
+</head>
+<body>
+  <div id="start-screen">
+    <h1>Welcome</h1>
+    <p>Click the button to start the GIF gallery!</p>
+    <button id="start-button">Start</button>
+  </div>
+  <div id="gallery"></div>
+  <div id="square"></div>
+  <div id="button-container">
+    <div id="category-buttons">
+      <!-- Buttons will be dynamically generated after fetching the CSV -->
+    </div>
+    <div id="toggle-button-container">
+      <button id="toggle-button" onclick="toggleButtons()">Show/Hide Categories</button>
+    </div>
+  </div>
+  <script>
+    const gallery = document.getElementById("gallery");
+    const square = document.getElementById("square");
+    const categoryButtons = document.getElementById("category-buttons");
+    const startScreen = document.getElementById("start-screen");
+    const startButton = document.getElementById("start-button");
+    const PADDING = 20;
+    const MIN_GIF_DIM = 80;
+    const MAX_GIF_DIM = 120;
+    const CSV_URL = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/GIFS/ALL.csv';
+
+    let allGifs = [];
+    let gifData = {};
+    let currentSquareGif = null;
+    let currentAudio = null;
+    const synth = window.speechSynthesis;
+    let lastSpokenGif = null;
+
+    // === UTILITY FUNCTIONS ===
+
+    // Helper function to shuffle an array
+    function shuffle(arr) {
+      return arr.sort(() => Math.random() - 0.5);
+    }
+
+    // Plays the name and sound effect for a given GIF URL
+    function speakAndPlay(gifObject) {
+      // Stop any current audio and speech
+      if (synth.speaking) {
+        synth.cancel();
+      }
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+      }
+
+      // Set the last spoken GIF to the current one
+      lastSpokenGif = gifObject;
+      
+      const utterance = new SpeechSynthesisUtterance(gifObject.name);
+      utterance.lang = 'en-US';
+      
+      utterance.onend = () => {
+        if (gifObject.sfxUrls && gifObject.sfxUrls.length > 0) {
+          playNextAudio(gifObject.sfxUrls);
+        }
+      };
+
+      synth.speak(utterance);
+    }
+
+    // Tries to play audio from a list of URLs, trying each one until one works.
+    function playNextAudio(urls) {
+      if (urls.length === 0) {
+        return;
+      }
+
+      currentAudio = new Audio();
+      const currentUrl = urls[0];
+
+      currentAudio.onerror = () => {
+        // If the current URL fails, try the next one in the list.
+        console.error(`Failed to load audio from ${currentUrl}. Trying next source...`);
+        playNextAudio(urls.slice(1));
+      };
+
+      currentAudio.src = currentUrl;
+      currentAudio.play().catch(e => {
+        // Log the error and move to the next URL if play fails
+        console.error(`Play failed for ${currentUrl}:`, e);
+      });
+    }
+
+
+    // === MAIN GALLERY LOGIC ===
+    function renderGallery(gifList) {
+      gallery.innerHTML = '';
+      
+      const numGifs = gifList.length;
+      
+      const squareHeight = square.offsetHeight;
+      const buttonContainerHeight = document.getElementById('button-container').offsetHeight;
+      
+      const containerWidth = window.innerWidth;
+      const containerHeight = window.innerHeight - squareHeight - buttonContainerHeight - PADDING * 4;
+      gallery.style.height = `${containerHeight}px`;
+
+      const aspectRatio = containerWidth / containerHeight;
+      
+      let cols = Math.ceil(Math.sqrt(numGifs * aspectRatio));
+      let rows = Math.ceil(numGifs / cols);
+      
+      const cellWidth = containerWidth / cols;
+      const cellHeight = containerHeight / rows;
+
+      gifList.forEach((gifObject, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'gif-wrapper';
+
+        // Calculate a safe base position within the grid cell
+        const x = (index % cols) * cellWidth;
+        const y = Math.floor(index / cols) * cellHeight;
+        
+        // Add a random offset within the cell, ensuring no overlap
+        const offsetX = Math.random() * (cellWidth - MIN_GIF_DIM) + PADDING;
+        const offsetY = Math.random() * (cellHeight - MIN_GIF_DIM) + PADDING;
+        
+        wrapper.style.left = `${x}px`;
+        wrapper.style.top = `${y}px`;
+        wrapper.style.width = `${MIN_GIF_DIM}px`;
+        wrapper.style.height = `${MIN_GIF_DIM}px`;
+        wrapper.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+        
+        const img = document.createElement("img");
+        img.src = gifObject.url;
+        
+        wrapper.appendChild(img);
+        wrapper.addEventListener("click", () => handleGifClick(wrapper, gifObject));
+        gallery.appendChild(wrapper);
+      });
+    }
+
+    // Updates the GIF in the display square
+    function setRandomSquareGif(playAudio = false) {
+      if (!allGifs.length) {
+        square.innerHTML = '<p>No GIFs</p>';
+        return;
+      }
+      
+      const randomIndex = Math.floor(Math.random() * allGifs.length);
+      currentSquareGif = allGifs[randomIndex];
+      square.innerHTML = `<img src="${currentSquareGif.url}" />`;
+      
+      if (playAudio) {
+        speakAndPlay(currentSquareGif);
+      }
+    }
+
+    // Event handler for clicking a gallery GIF
+    function handleGifClick(wrapper, gifObject) {
+      // Check if the same GIF is being clicked and audio is currently playing
+      if (gifObject === lastSpokenGif && (synth.speaking || (currentAudio && !currentAudio.paused))) {
+        // If so, stop the audio and speech and exit the function
+        synth.cancel();
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio = null;
+        }
+        lastSpokenGif = null;
+        return;
+      }
+
+      speakAndPlay(gifObject);
+      
+      if (currentSquareGif && gifObject.name === currentSquareGif.name) {
+        const circle = document.createElement("img");
+        circle.src = "https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/GIFS/circle.gif";
+        circle.className = "circle";
+        wrapper.appendChild(circle);
+        
+        setTimeout(() => circle.remove(), 1500);
+        
+        setRandomSquareGif(true);
+      }
+    }
+
+    window.setGifCategory = function(category) {
+      let gifList = [];
+      if (category === 'all') {
+        gifList = Object.values(gifData).flat();
+      } else {
+        gifList = gifData[category];
+      }
+      
+      if (!gifList || gifList.length === 0) {
+        gallery.innerHTML = '<p>No GIFs found in this category.</p>';
+        square.innerHTML = '';
+        allGifs = [];
+        currentSquareGif = null;
+        return;
+      }
+      allGifs = shuffle(gifList);
+      
+      renderGallery(allGifs);
+      setRandomSquareGif();
+
+      if (!categoryButtons.classList.contains('collapsed')) {
+        categoryButtons.classList.add('collapsed');
+      }
+    };
+
+    // === COLLAPSIBLE BUTTONS LOGIC ===
+    window.toggleButtons = function() {
+      categoryButtons.classList.toggle('collapsed');
+    };
+    
+    // Add click event listener to the display square
+    square.addEventListener('click', () => {
+      if (currentSquareGif) {
+        speakAndPlay(currentSquareGif);
+      }
+    });
+
+    // === DATA FETCHING ===
+    async function fetchGifData() {
+      try {
+        const response = await fetch(CSV_URL);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const csvText = await response.text();
+        const lines = csvText.split('\n');
+        
+        const categories = {};
+        const audioExtensions = ['wav', 'mp3', 'flac'];
+
+        lines.forEach(line => {
+          const [folder, file] = line.trim().split(',');
+          if (folder && file) {
+            const categoryName = folder.toLowerCase();
+            const fileNameWithoutExt = file.split('.')[0].replace(/\d/g, '');
+            
+            const gifUrl = `https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/GIFS/${folder}/${file}`;
+            const sfxUrls = [];
+
+            // Collect all possible sound effect URLs
+            for (const ext of audioExtensions) {
+              sfxUrls.push(`https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/GIFS/SFX/${fileNameWithoutExt}.${ext}`);
+            }
+
+            if (!categories[categoryName]) {
+              categories[categoryName] = [];
+            }
+            categories[categoryName].push({
+              name: fileNameWithoutExt,
+              url: gifUrl,
+              sfxUrls: sfxUrls // Store an array of URLs
+            });
+          }
+        });
+
+        gifData = categories;
+        generateCategoryButtons();
+        setGifCategory('all');
+
+      } catch (e) {
+        console.error("Failed to fetch or parse GIF data:", e);
+        gallery.innerHTML = '<p>Error loading content. Please try again later.</p>';
+      }
+    }
+
+    function generateCategoryButtons() {
+      categoryButtons.innerHTML = ''; // Clear existing buttons
+      const categoryNames = Object.keys(gifData);
+      const emojiMap = {
+        'farm': '🐄',
+        'dino': '🦖',
+        'wheel': '🛞',
+        'zoo': '🦁',
+        'music': '🎵'
+      };
+
+      categoryNames.forEach(category => {
+        const button = document.createElement('button');
+        button.className = 'category-button';
+        button.onclick = () => setGifCategory(category);
+        button.textContent = emojiMap[category] || category; // Use emoji if available
+        categoryButtons.appendChild(button);
+      });
+
+      // Add the 'all' button
+      const allButton = document.createElement('button');
+      allButton.className = 'category-button';
+      allButton.onclick = () => setGifCategory('all');
+      allButton.innerHTML = `<div class="all-emojis-grid"><span>🐄</span><span>🦖</span><span>🛞</span><span>🦁</span><span>🎵</span></div>`;
+      categoryButtons.appendChild(allButton);
+    }
+
+    // === INITIALIZATION ===
+    function initialize() {
+      startButton.addEventListener('click', () => {
+        startScreen.classList.add('hidden');
+        fetchGifData();
+      });
+    }
+
+    window.onload = initialize;
+    window.onresize = () => {
+      if (!startScreen.classList.contains('hidden') || !allGifs.length) {
+        return;
+      }
+      renderGallery(allGifs);
+    };
+  </script>
+</body>
+</html>
