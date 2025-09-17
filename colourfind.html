@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colour Finder</title>
+    <!-- Tailwind CSS from CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        #video-container {
+            position: relative;
+            width: 100%;
+            height: 70vh; /* Adjust height for a good view */
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #111827;
+        }
+        #video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* This makes the video fill the container without distortion */
+        }
+        .color-box {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between min-h-screen p-4 bg-gray-100 text-gray-800">
+
+    <main class="w-full max-w-2xl flex flex-col items-center gap-6">
+        <h1 class="text-3xl sm:text-4xl font-bold text-center mt-4">Colour Finder</h1>
+        <p id="message" class="text-sm text-center text-gray-600">Tap anywhere on the camera feed to find the colour of that spot.</p>
+
+        <!-- Color Comparison Section -->
+        <div class="flex items-center justify-center gap-4 w-full p-4 bg-white rounded-xl shadow-lg border border-gray-200">
+            <div class="flex flex-col items-center flex-1">
+                <p class="text-sm font-medium mb-1 text-gray-500">Target Colour</p>
+                <div id="targetColor" class="w-24 h-24 sm:w-28 sm:h-28 rounded-full shadow-inner border-2 border-dashed border-gray-400"></div>
+                <p id="targetHex" class="mt-2 text-xs font-mono text-gray-700">-</p>
+            </div>
+            <div class="text-4xl font-thin text-gray-400">vs</div>
+            <div class="flex flex-col items-center flex-1">
+                <p class="text-sm font-medium mb-1 text-gray-500">Selected Colour</p>
+                <div id="selectedColor" class="w-24 h-24 sm:w-28 sm:h-28 rounded-full shadow-inner border-2 border-dashed border-gray-400"></div>
+                <p id="selectedHex" class="mt-2 text-xs font-mono text-gray-700">-</p>
+            </div>
+        </div>
+
+        <!-- New Color Button -->
+        <button id="newColorButton" class="w-full max-w-xs px-6 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-md hover:bg-blue-700 transition-colors duration-200">
+            Look for a New Colour 
+        </button>
+
+        <!-- Video Container -->
+        <div id="video-container" class="w-full rounded-2xl shadow-xl overflow-hidden mt-2">
+            <video id="video" playsinline autoplay></video>
+            <div id="error-message" class="absolute inset-0 flex items-center justify-center text-white text-center p-4" style="display: none;">
+                Camera access denied or not available. Please enable camera permissions.
+            </div>
+        </div>
+
+        <!-- Hidden Canvas for capturing frames -->
+        <canvas id="canvas" class="hidden"></canvas>
+    </main>
+
+    <footer class="text-center text-gray-500 text-xs p-4">
+        Created with Gemini
+    </footer>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        const targetColorDiv = document.getElementById('targetColor');
+        const selectedColorDiv = document.getElementById('selectedColor');
+        const targetHexText = document.getElementById('targetHex');
+        const selectedHexText = document.getElementById('selectedHex');
+        const messageEl = document.getElementById('message');
+        const errorMessageDiv = document.getElementById('error-message');
+        const newColorButton = document.getElementById('newColorButton');
+
+        // Function to generate a random hex color
+        function getRandomColor() {
+            const hex = "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+            return hex;
+        }
+
+        // Function to set a new target color
+        function setNewTargetColor() {
+            let targetColorHex = getRandomColor();
+            targetColorDiv.style.backgroundColor = targetColorHex;
+            targetHexText.textContent = targetColorHex.toUpperCase();
+            selectedColorDiv.style.backgroundColor = 'transparent';
+            selectedHexText.textContent = '-';
+        }
+
+        // Set an initial target color
+        setNewTargetColor();
+
+        // Add event listener to the new color button
+        newColorButton.addEventListener('click', setNewTargetColor);
+
+        // Get video stream from back camera
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    // Update the canvas dimensions to match the video
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                };
+                errorMessageDiv.style.display = 'none';
+                messageEl.textContent = `Tap on an object that matches this color:`;
+            } catch (err) {
+                console.error("Camera access error:", err);
+                errorMessageDiv.style.display = 'flex';
+                messageEl.textContent = 'Please enable camera permissions.';
+            }
+        }
+
+        // Handle click/touch events on the video feed
+        video.addEventListener('click', (e) => {
+            handleColorSelection(e.offsetX, e.offsetY);
+        });
+
+        video.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            const rect = video.getBoundingClientRect();
+            const x = (touch.clientX - rect.left) / rect.width * video.videoWidth;
+            const y = (touch.clientY - rect.top) / rect.height * video.videoHeight;
+            handleColorSelection(x, y);
+            e.preventDefault(); // Prevent double-tap to zoom on mobile
+        });
+
+        function handleColorSelection(x, y) {
+            // Draw a single frame from the video onto the canvas
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Get the pixel data at the clicked coordinates
+            const pixelData = context.getImageData(x, y, 1, 1).data;
+            const r = pixelData[0];
+            const g = pixelData[1];
+            const b = pixelData[2];
+
+            // Convert RGB to Hex
+            const selectedHex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+
+            // Update the UI with the selected color
+            selectedColorDiv.style.backgroundColor = selectedHex;
+            selectedHexText.textContent = selectedHex;
+        }
+
+        // Start the camera
+        setupCamera();
+    </script>
+</body>
+</html>
+
