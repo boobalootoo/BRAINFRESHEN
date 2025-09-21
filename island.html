@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Desert Island Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background-color: white;
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .game-area {
+            position: relative;
+            height: 500px;
+            background-image: url('https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/island/island.jpg');
+            background-size: cover;
+            background-position: center;
+            border-radius: 1rem;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 1rem;
+        }
+        .island-area {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70%;
+            height: 70%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+            align-content: flex-start;
+        }
+        .ocean-area {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 30%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+            align-content: flex-end;
+            padding-bottom: 2rem;
+        }
+        .item-chip {
+            padding: 0.5rem 1rem;
+            background-color: #fefcbf;
+            border-radius: 9999px;
+            font-weight: 600;
+            color: #4a4a4a;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.2s linear;
+        }
+        .modal.visible {
+            visibility: visible;
+            opacity: 1;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            max-width: 500px;
+            text-align: left;
+            position: relative;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container text-center">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-4xl font-bold text-gray-800">Desert Island Game</h1>
+            <button id="infoButton" class="text-gray-500 hover:text-gray-700 transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </button>
+        </div>
+
+        <p class="text-gray-600 mb-6">
+            Guess what you can bring to the desert island! The host will tell you if your guess is correct.
+        </p>
+
+        <div class="mb-6 flex flex-col md:flex-row justify-center items-center space-y-4 md:space-y-0 md:space-x-4">
+            <input type="text" id="itemInput" placeholder="What will you bring?" class="w-full md:w-2/3 lg:w-1/2 px-4 py-3 rounded-lg border-2 border-gray-300 focus:outline-none focus:border-indigo-500 transition duration-200">
+            <button id="guessButton" class="w-full md:w-auto px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition duration-200 shadow-lg">
+                Guess
+            </button>
+        </div>
+
+        <!-- This is where the game master places items -->
+        <div class="mb-8 flex flex-col md:flex-row justify-center items-center space-y-2 md:space-y-0 md:space-x-4">
+            <button id="placeOnIslandButton" class="w-full md:w-auto px-6 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition duration-200 shadow-lg">
+                Place on Island
+            </button>
+            <button id="placeInOceanButton" class="w-full md:w-auto px-6 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition duration-200 shadow-lg">
+                Place in Ocean
+            </button>
+        </div>
+
+        <div id="messageBox" class="text-center mb-6 text-red-600 font-semibold"></div>
+
+        <!-- Main game visual area -->
+        <div class="game-area">
+            <div id="islandItems" class="island-area"></div>
+            <div id="oceanItems" class="ocean-area"></div>
+        </div>
+    </div>
+
+    <!-- Info Modal -->
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <h3 class="text-2xl font-bold mb-4">How to Play</h3>
+            <p class="mb-2">One player secretly knows the rule for what can be brought to the island. All other players guess items one by one.</p>
+            <p class="mb-2"><strong>1. Guessing:</strong> Enter an item in the text box and click "Guess."</p>
+            <p class="mb-4"><strong>2. The Host:</strong> The player who knows the rule checks the item and then clicks either "Place on Island" (if it's allowed) or "Place in Ocean" (if it's not allowed).</p>
+            <p>The game continues until the players figure out the rule!</p>
+            <button id="closeModalButton" class="mt-6 w-full px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition duration-200 shadow-lg">
+                Got it!
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const itemInput = document.getElementById('itemInput');
+        const guessButton = document.getElementById('guessButton');
+        const placeOnIslandButton = document.getElementById('placeOnIslandButton');
+        const placeInOceanButton = document.getElementById('placeInOceanButton');
+        const messageBox = document.getElementById('messageBox');
+        const islandItems = document.getElementById('islandItems');
+        const oceanItems = document.getElementById('oceanItems');
+        const infoButton = document.getElementById('infoButton');
+        const infoModal = document.getElementById('infoModal');
+        const closeModalButton = document.getElementById('closeModalButton');
+
+        // Handles displaying a message to the user
+        function displayMessage(message, type = 'info') {
+            let color = 'text-gray-600';
+            if (type === 'success') {
+                color = 'text-green-600 font-semibold';
+            } else if (type === 'error') {
+                color = 'text-red-600 font-semibold';
+            }
+            messageBox.className = `text-center mb-6 ${color}`;
+            messageBox.textContent = message;
+        }
+
+        // Adds an item to the designated area (island or ocean)
+        function addItem(item, isAllowed) {
+            const itemChip = document.createElement('div');
+            itemChip.className = 'item-chip';
+            itemChip.textContent = item;
+            if (isAllowed) {
+                islandItems.appendChild(itemChip);
+            } else {
+                oceanItems.appendChild(itemChip);
+            }
+        }
+
+        // Event listener for the "Guess" button
+        guessButton.addEventListener('click', () => {
+            const item = itemInput.value.trim();
+            if (!item) {
+                displayMessage("Please enter an item!", "error");
+            } else {
+                displayMessage(`Okay, the host will now decide where to place "${item}".`);
+            }
+        });
+
+        // Event listener for "Place on Island" button
+        placeOnIslandButton.addEventListener('click', () => {
+            const item = itemInput.value.trim();
+            if (item) {
+                addItem(item, true);
+                displayMessage(`"${item}" has been placed on the island.`);
+                itemInput.value = '';
+            } else {
+                displayMessage("No item to place on the island.", "error");
+            }
+        });
+
+        // Event listener for "Place in Ocean" button
+        placeInOceanButton.addEventListener('click', () => {
+            const item = itemInput.value.trim();
+            if (item) {
+                addItem(item, false);
+                displayMessage(`"${item}" has been placed in the ocean.`);
+                itemInput.value = '';
+            } else {
+                displayMessage("No item to place in the ocean.", "error");
+            }
+        });
+
+        // Event listener for Info button
+        infoButton.addEventListener('click', () => {
+            infoModal.classList.add('visible');
+        });
+
+        // Event listener to close the modal
+        closeModalButton.addEventListener('click', () => {
+            infoModal.classList.remove('visible');
+        });
+
+        // Event listener for the Enter key on the input field
+        itemInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                guessButton.click();
+            }
+        });
+
+        // Initial message
+        displayMessage("The game has started. Let's see what you can bring!");
+
+    </script>
+</body>
+</html>
