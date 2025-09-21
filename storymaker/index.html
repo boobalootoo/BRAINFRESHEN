@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storytelling Image Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .app-container {
+            max-width: 800px;
+            width: 100%;
+            padding: 2rem;
+            background-color: #ffffff;
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border: 1px solid #e5e7eb;
+        }
+        .btn {
+            @apply flex-1 py-3 px-6 rounded-xl font-bold text-white shadow-lg transition transform duration-200 hover:scale-105;
+        }
+        .btn-character { background-color: #4b5563; }
+        .btn-character:hover { background-color: #374151; }
+        .btn-creature { background-color: #ef4444; }
+        .btn-creature:hover { background-color: #dc2626; }
+        .btn-location { background-color: #3b82f6; }
+        .btn-location:hover { background-color: #2563eb; }
+        .btn-object { background-color: #10b981; }
+        .btn-object:hover { background-color: #059669; }
+        .btn-all { background-color: #8b5cf6; }
+        .btn-all:hover { background-color: #7c3aed; }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #ffffff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-4">
+
+    <div class="app-container">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">Image Generator</h1>
+            <p class="text-lg text-gray-500">Generate a visual for your story by category.</p>
+        </div>
+        
+        <div class="mb-6">
+            <label for="genre-select" class="block text-sm font-medium text-gray-700 mb-1">Select Genre</label>
+            <select id="genre-select" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                <!-- Genres will populate dynamically from CSV -->
+            </select>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <button id="character-btn" class="btn btn-character">Character</button>
+            <button id="creature-btn" class="btn btn-creature">Creature</button>
+            <button id="location-btn" class="btn btn-location">Location</button>
+            <button id="object-btn" class="btn btn-object">Object</button>
+        </div>
+        
+        <div class="flex justify-center mb-8">
+            <button id="generate-all-btn" class="btn btn-all w-full sm:w-1/2">Generate All</button>
+        </div>
+
+        <div id="image-display-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <!-- Category Image Containers -->
+            <div id="character-container" class="bg-gray-100 rounded-xl p-4 border border-gray-300">
+                <h2 class="text-center font-bold text-gray-700 mb-2">Character</h2>
+                <div class="w-full h-48 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                    <p id="character-placeholder" class="text-gray-500 text-sm">Click a button to generate.</p>
+                    <div id="character-spinner" class="hidden spinner"></div>
+                    <img id="character-image" class="hidden w-full h-full object-cover">
+                </div>
+                <div id="character-error" class="mt-2 text-center text-red-500 text-sm font-medium hidden"></div>
+            </div>
+
+            <div id="creature-container" class="bg-gray-100 rounded-xl p-4 border border-gray-300">
+                <h2 class="text-center font-bold text-gray-700 mb-2">Creature</h2>
+                <div class="w-full h-48 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                    <p id="creature-placeholder" class="text-gray-500 text-sm">Click a button to generate.</p>
+                    <div id="creature-spinner" class="hidden spinner"></div>
+                    <img id="creature-image" class="hidden w-full h-full object-cover">
+                </div>
+                <div id="creature-error" class="mt-2 text-center text-red-500 text-sm font-medium hidden"></div>
+            </div>
+
+            <div id="location-container" class="bg-gray-100 rounded-xl p-4 border border-gray-300">
+                <h2 class="text-center font-bold text-gray-700 mb-2">Location</h2>
+                <div class="w-full h-48 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                    <p id="location-placeholder" class="text-gray-500 text-sm">Click a button to generate.</p>
+                    <div id="location-spinner" class="hidden spinner"></div>
+                    <img id="location-image" class="hidden w-full h-full object-cover">
+                </div>
+                <div id="location-error" class="mt-2 text-center text-red-500 text-sm font-medium hidden"></div>
+            </div>
+
+            <div id="object-container" class="bg-gray-100 rounded-xl p-4 border border-gray-300">
+                <h2 class="text-center font-bold text-gray-700 mb-2">Object</h2>
+                <div class="w-full h-48 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                    <p id="object-placeholder" class="text-gray-500 text-sm">Click a button to generate.</p>
+                    <div id="object-spinner" class="hidden spinner"></div>
+                    <img id="object-image" class="hidden w-full h-full object-cover">
+                </div>
+                <div id="object-error" class="mt-2 text-center text-red-500 text-sm font-medium hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const genreSelect = document.getElementById('genre-select');
+        const buttons = {
+            character: document.getElementById('character-btn'),
+            creature: document.getElementById('creature-btn'),
+            location: document.getElementById('location-btn'),
+            object: document.getElementById('object-btn'),
+            all: document.getElementById('generate-all-btn')
+        };
+
+        const displays = {
+            character: {
+                placeholder: document.getElementById('character-placeholder'),
+                spinner: document.getElementById('character-spinner'),
+                image: document.getElementById('character-image'),
+                error: document.getElementById('character-error')
+            },
+            creature: {
+                placeholder: document.getElementById('creature-placeholder'),
+                spinner: document.getElementById('creature-spinner'),
+                image: document.getElementById('creature-image'),
+                error: document.getElementById('creature-error')
+            },
+            location: {
+                placeholder: document.getElementById('location-placeholder'),
+                spinner: document.getElementById('location-spinner'),
+                image: document.getElementById('location-image'),
+                error: document.getElementById('location-error')
+            },
+            object: {
+                placeholder: document.getElementById('object-placeholder'),
+                spinner: document.getElementById('object-spinner'),
+                image: document.getElementById('object-image'),
+                error: document.getElementById('object-error')
+            }
+        };
+
+        let imageData = {};
+        const csvUrl = "https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/storymaker/info.csv";
+
+        Papa.parse(csvUrl, {
+            download: true,
+            header: true,
+            complete: function(results) {
+                results.data.forEach(row => {
+                    if (!row.Genre || !row.Category || !row.Image_URL) return;
+                    const genre = row.Genre.toLowerCase();
+                    const category = row.Category.toLowerCase();
+                    if (!imageData[genre]) imageData[genre] = {};
+                    if (!imageData[genre][category]) imageData[genre][category] = [];
+                    imageData[genre][category].push(row.Image_URL);
+                });
+
+                // populate genre dropdown
+                genreSelect.innerHTML = "";
+                Object.keys(imageData).sort().forEach(genre => {
+                    const option = document.createElement('option');
+                    option.value = genre;
+                    option.textContent = genre.charAt(0).toUpperCase() + genre.slice(1);
+                    genreSelect.appendChild(option);
+                });
+            },
+            error: function(err) { console.error("CSV load error:", err); }
+        });
+
+        function generateImage(category) {
+            const genre = genreSelect.value;
+            if (!imageData[genre] || !imageData[genre][category]) return;
+            const urlList = imageData[genre][category];
+            const selectedUrl = urlList[Math.floor(Math.random() * urlList.length)];
+
+            const display = displays[category];
+            display.placeholder.classList.add('hidden');
+            display.spinner.classList.add('hidden');
+            display.image.src = selectedUrl;
+            display.image.classList.remove('hidden');
+        }
+
+        function generateAll() {
+            ['character','creature','location','object'].forEach(generateImage);
+        }
+
+        buttons.character.addEventListener('click', () => generateImage('character'));
+        buttons.creature.addEventListener('click', () => generateImage('creature'));
+        buttons.location.addEventListener('click', () => generateImage('location'));
+        buttons.object.addEventListener('click', () => generateImage('object'));
+        buttons.all.addEventListener('click', generateAll);
+    });
+    </script>
+</body>
+</html>
