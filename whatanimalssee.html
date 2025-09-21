@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animal Vision Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase configuration and initialization
+        setLogLevel('debug');
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        const uploadButton = document.getElementById('upload-btn');
+        const cameraButton = document.getElementById('camera-btn');
+        const fileInput = document.getElementById('file-input');
+        const videoElement = document.getElementById('camera-feed');
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const processingMessage = document.getElementById('processing-message');
+        const userIdDisplay = document.getElementById('user-id');
+        const animalCanvasContainer = document.getElementById('animal-canvases');
+
+        let isAuthReady = false;
+        let userId = null;
+        let isCameraActive = false;
+        let animationFrameId = null;
+
+        const authPromise = new Promise((resolve) => {
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    userId = user.uid;
+                    userIdDisplay.textContent = `User ID: ${userId}`;
+                } else {
+                    userId = crypto.randomUUID(); // Fallback for anonymous login failure
+                    userIdDisplay.textContent = `User ID: ${userId}`;
+                }
+                isAuthReady = true;
+                resolve();
+            });
+        });
+
+        // Sign in anonymously or with custom token
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                const userRef = doc(db, "artifacts", typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', "users", userId, "appData", "state");
+                await setDoc(userRef, { lastLogin: new Date().toISOString() }, { merge: true });
+                console.log("Firebase initialized successfully.");
+            } catch (error) {
+                console.error("Firebase Auth error:", error);
+            }
+        };
+
+        const animalFilters = {
+            'Human': (pixels) => pixels, // No filter
+            'Dog (Dichromatic)': (pixels) => {
+                const data = pixels.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    const avg = (r * 0.299 + g * 0.587 + b * 0.114) * 0.7; // Reduce saturation
+                    data[i] = avg; // R
+                    data[i + 1] = avg; // G
+                    data[i + 2] = b; // Keep B
+                }
+                return pixels;
+            },
+            'Bee (UV)': (pixels) => {
+                const data = pixels.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    const newR = g * 0.5 + b * 0.5;
+                    const newG = b * 1.5;
+                    const newB = r * 0.8;
+                    data[i] = newR;
+                    data[i + 1] = newG;
+                    data[i + 2] = newB;
+                }
+                return pixels;
+            },
+            'Snake (Thermal)': (pixels) => {
+                const data = pixels.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    const avg = (r + g + b) / 3;
+                    // Invert and map to a red-black scale for a thermal effect
+                    data[i] = 255 - avg; // Red channel
+                    data[i + 1] = avg * 0.2; // Small green for glow
+                    data[i + 2] = 0; // No blue
+                }
+                return pixels;
+            },
+            'Bird (Tetrachromatic)': (pixels) => {
+                const data = pixels.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    data[i] = r * 1.1; // Enhance R
+                    data[i + 1] = g * 1.2; // Enhance G
+                    data[i + 2] = b * 1.5; // Emphasize B/UV
+                }
+                return pixels;
+            },
+            'Mantis Shrimp (Multi-spectral)': (pixels) => {
+                const data = pixels.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    data[i] = (r * 1.5) % 255;
+                    data[i + 1] = (g * 1.2 + b * 0.5) % 255;
+                    data[i + 2] = (b * 1.3 + r * 0.5) % 255;
+                }
+                return pixels;
+            }
+        };
+
+        function createCanvasForAnimal(animalName) {
+            const container = document.createElement('div');
+            container.className = 'w-full sm:w-1/2 md:w-1/3 p-2';
+
+            const card = document.createElement('div');
+            card.className = 'bg-gray-700 p-4 rounded-lg shadow-inner';
+            container.appendChild(card);
+
+            const title = document.createElement('h3');
+            title.className = 'text-xl font-semibold text-center mb-2';
+            title.textContent = animalName;
+            card.appendChild(title);
+
+            const canvas = document.createElement('canvas');
+            canvas.className = 'w-full h-auto rounded-md border border-gray-600';
+            canvas.id = `canvas-${animalName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+            card.appendChild(canvas);
+
+            animalCanvasContainer.appendChild(container);
+            return canvas;
+        }
+
+        const animalCanvases = Object.keys(animalFilters).reduce((acc, name) => {
+            acc[name] = createCanvasForAnimal(name);
+            return acc;
+        }, {});
+
+        function processAndDraw(source) {
+            let width, height;
+            if (source.tagName === 'VIDEO') {
+                width = source.videoWidth;
+                height = source.videoHeight;
+            } else {
+                width = source.naturalWidth;
+                height = source.naturalHeight;
+            }
+            if (width === 0 || height === 0) return; // Guard against empty frames
+
+            mainCanvas.width = width;
+            mainCanvas.height = height;
+            mainCtx.drawImage(source, 0, 0, width, height);
+            const imageData = mainCtx.getImageData(0, 0, width, height);
+
+            for (const animalName in animalFilters) {
+                const canvas = animalCanvases[animalName];
+                const ctx = canvas.getContext('2d');
+                canvas.width = width;
+                canvas.height = height;
+
+                const processedData = animalFilters[animalName](new ImageData(new Uint8ClampedArray(imageData.data), width, height));
+                ctx.putImageData(processedData, 0, 0);
+            }
+        }
+
+        function gameLoop() {
+            if (isCameraActive) {
+                processAndDraw(videoElement);
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Stop camera if active
+            if (isCameraActive) {
+                const stream = videoElement.srcObject;
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                isCameraActive = false;
+                videoElement.style.display = 'none';
+                cancelAnimationFrame(animationFrameId);
+            }
+
+            processingMessage.textContent = 'Processing image...';
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    processingMessage.textContent = '';
+                    processAndDraw(img);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        uploadButton.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        cameraButton.addEventListener('click', async () => {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                processingMessage.textContent = 'Camera is not supported on this browser.';
+                return;
+            }
+
+            try {
+                processingMessage.textContent = 'Accessing camera...';
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                processingMessage.textContent = '';
+
+                videoElement.srcObject = stream;
+                videoElement.style.display = 'block';
+                videoElement.play();
+
+                isCameraActive = true;
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                animationFrameId = requestAnimationFrame(gameLoop);
+            } catch (err) {
+                console.error("Error accessing the camera:", err);
+                processingMessage.textContent = 'Could not access camera. Please check permissions.';
+            }
+        });
+
+        window.onload = () => {
+            // Wait for auth to be ready before doing anything with Firestore
+            authPromise.then(() => {
+                initAuth();
+            });
+        };
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+    <div class="bg-gray-800 rounded-2xl shadow-2xl p-6 sm:p-10 w-full max-w-7xl">
+        <header class="text-center mb-6 sm:mb-10">
+            <h1 class="text-3xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+                Animal Vision Simulator
+            </h1>
+            <p id="user-id" class="text-sm mt-2 text-gray-400"></p>
+        </header>
+
+        <main class="grid lg:grid-cols-2 gap-8">
+            <!-- Left Panel: Controls and Input Display -->
+            <div class="space-y-6">
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <button id="upload-btn" class="flex-1 bg-gradient-to-br from-green-500 to-emerald-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-300">
+                        Upload Image
+                    </button>
+                    <button id="camera-btn" class="flex-1 bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:from-purple-600 hover:to-indigo-700 transition-all duration-300">
+                        Live Camera
+                    </button>
+                </div>
+
+                <div class="bg-gray-700 p-4 rounded-xl shadow-inner text-center">
+                    <h2 class="text-2xl font-semibold mb-2">Original View (Human)</h2>
+                    <p id="processing-message" class="text-yellow-400 text-sm mb-2"></p>
+                    <video id="camera-feed" class="w-full h-auto rounded-lg border border-gray-600" style="display:none;"></video>
+                    <canvas id="main-canvas" class="w-full h-auto rounded-lg border border-gray-600 bg-gray-600"></canvas>
+                </div>
+            </div>
+
+            <!-- Right Panel: Animal Vision Canvases -->
+            <div>
+                <h2 class="text-2xl font-semibold text-center mb-4 sm:mb-6">Animal Perceptions</h2>
+                <div id="animal-canvases" class="flex flex-wrap -m-2">
+                    <!-- Canvases will be injected here by JS -->
+                </div>
+            </div>
+        </main>
+    </div>
+    <input type="file" id="file-input" accept="image/*" style="display: none;">
+</body>
+</html>
