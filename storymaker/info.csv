@@ -1,0 +1,117 @@
+Genre,Category,Item,Photo_URL,Cartoon_URL
+Adventure/Mystery,Character,Detective,https://upload.wikimedia.org/wikipedia/commons/e/e0/Sherlock_Holmes_Portrait_Paget.jpg,https://upload.wikimedia.org/wikipedia/commons/f/f2/Detective_icon_cartoon.svg
+Adventure/Mystery,Character,Explorer,https://upload.wikimedia.org/wikipedia/commons/5/5f/Explorer_in_Amazon.jpg,https://upload.wikimedia.org/wikipedia/commons/f/f3/Explorer_cartoon_icon.png
+Adventure/Mystery,Character,Archaeologist,https://upload.wikimedia.org/wikipedia/commons/d/d6/Excavation_archaeology.jpg,https://upload.wikimedia.org/wikipedia/commons/8/84/Cartoon_archaeologist_icon.png
+Adventure/Mystery,Creature,Crocodile,https://upload.wikimedia.org/wikipedia/commons/6/6e/Nile_crocodile_head.jpg,https://upload.wikimedia.org/wikipedia/commons/3/3c/Crocodile_cartoon.svg
+Adventure/Mystery,Creature,Snake,https://upload.wikimedia.org/wikipedia/commons/5/58/Green_tree_python.jpg,https://upload.wikimedia.org/wikipedia/commons/d/d4/Snake_cartoon_icon.png
+Adventure/Mystery,Location,Temple Ruins,https://upload.wikimedia.org/wikipedia/commons/7/79/Mayan_Temple_Chichen_Itza.jpg,https://upload.wikimedia.org/wikipedia/commons/7/7a/Temple_ruins_cartoon.png
+Adventure/Mystery,Location,Jungle,https://upload.wikimedia.org/wikipedia/commons/e/e6/Tropical_rainforest.jpg,https://upload.wikimedia.org/wikipedia/commons/8/8f/Jungle_cartoon.svg
+Adventure/Mystery,Location,Hidden Cave,https://upload.wikimedia.org/wikipedia/commons/2/22/Cave_inside.jpg,https://upload.wikimedia.org/wikipedia/commons/4/44/Cave_cartoon_icon.png
+Adventure/Mystery,Object,Treasure Map,https://upload.wikimedia.org/wikipedia/commons/2/29/Treasure_map_drawing.jpg,https://upload.wikimedia.org/wikipedia/commons/5/57/Treasure_map_cartoon.svg
+Adventure/Mystery,Object,Compass,https://upload.wikimedia.org/wikipedia/commons/f/f5/Compass_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/6/6a/Compass_cartoon_icon.png
+Animals/Nature,Character,Puppy,https://upload.wikimedia.org/wikipedia/commons/8/86/Puppy_on_grass.jpg,https://upload.wikimedia.org/wikipedia/commons/5/5d/Puppy_cartoon.svg
+Animals/Nature,Character,Kitten,https://upload.wikimedia.org/wikipedia/commons/4/4c/Cute_kitten.jpg,https://upload.wikimedia.org/wikipedia/commons/b/b1/Kitten_cartoon_icon.png
+Animals/Nature,Character,Lion Cub,https://upload.wikimedia.org/wikipedia/commons/0/07/Lion_cub_in_Grass.jpg,https://upload.wikimedia.org/wikipedia/commons/9/99/Lion_cub_cartoon.svg
+Animals/Nature,Character,Baby Elephant,https://upload.wikimedia.org/wikipedia/commons/3/37/Baby_elephant_in_thailand.jpg,https://upload.wikimedia.org/wikipedia/commons/6/6a/Elephant_cartoon_icon.png
+Animals/Nature,Creature,Butterfly,https://upload.wikimedia.org/wikipedia/commons/d/d7/Monarch_Butterfly_Danaus_plexippus.jpg,https://upload.wikimedia.org/wikipedia/commons/3/30/Butterfly_cartoon.svg
+Animals/Nature,Creature,Ladybug,https://upload.wikimedia.org/wikipedia/commons/0/07/Ladybird_red.jpg,https://upload.wikimedia.org/wikipedia/commons/1/1b/Ladybug_cartoon.svg
+Animals/Nature,Creature,Turtle,https://upload.wikimedia.org/wikipedia/commons/d/d1/Green_turtle_swimming.jpg,https://upload.wikimedia.org/wikipedia/commons/3/31/Turtle_cartoon_icon.png
+Animals/Nature,Creature,Frog,https://upload.wikimedia.org/wikipedia/commons/2/2d/Green_frog_sitting.jpg,https://upload.wikimedia.org/wikipedia/commons/4/41/Frog_cartoon.svg
+Animals/Nature,Location,Forest,https://upload.wikimedia.org/wikipedia/commons/3/3a/Forest_in_Germany.jpg,https://upload.wikimedia.org/wikipedia/commons/7/7a/Forest_cartoon_icon.png
+Animals/Nature,Location,Beach,https://upload.wikimedia.org/wikipedia/commons/3/3a/Tropical_beach.jpg,https://upload.wikimedia.org/wikipedia/commons/1/1e/Beach_cartoon.svg
+Animals/Nature,Location,Garden,https://upload.wikimedia.org/wikipedia/commons/5/57/Flower_garden.jpg,https://upload.wikimedia.org/wikipedia/commons/e/e2/Garden_cartoon_icon.png
+Animals/Nature,Location,Pond,https://upload.wikimedia.org/wikipedia/commons/1/1b/Pond_in_summer.jpg,https://upload.wikimedia.org/wikipedia/commons/0/0c/Pond_cartoon_icon.png
+Animals/Nature,Object,Flower,https://upload.wikimedia.org/wikipedia/commons/4/40/Rose_flower.jpg,https://upload.wikimedia.org/wikipedia/commons/8/88/Flower_cartoon_icon.png
+Animals/Nature,Object,Leaf,https://upload.wikimedia.org/wikipedia/commons/6/6b/Maple_leaf_red.jpg,https://upload.wikimedia.org/wikipedia/commons/3/3c/Leaf_cartoon_icon.png
+Animals/Nature,Object,Acorn,https://upload.wikimedia.org/wikipedia/commons/f/f1/Acorn_closeup.jpg,https://upload.wikimedia.org/wikipedia/commons/4/45/Acorn_cartoon_icon.png
+Animals/Nature,Object,Stick,https://upload.wikimedia.org/wikipedia/commons/d/d3/Stick_on_ground.jpg,https://upload.wikimedia.org/wikipedia/commons/e/e8/Stick_cartoon_icon.png
+Fantasy,Character,Knight,https://upload.wikimedia.org/wikipedia/commons/8/89/Knight_in_armor.jpg,https://upload.wikimedia.org/wikipedia/commons/f/f8/Knight_cartoon_icon.png
+Fantasy,Character,Princess,https://upload.wikimedia.org/wikipedia/commons/0/0d/Princess_Diana_1987.jpg,https://upload.wikimedia.org/wikipedia/commons/1/1c/Princess_cartoon_icon.png
+Fantasy,Character,Wizard,https://upload.wikimedia.org/wikipedia/commons/e/eb/Gandalf_costume_2013.jpg,https://upload.wikimedia.org/wikipedia/commons/6/61/Wizard_cartoon_icon.png
+Fantasy,Character,Elf,https://upload.wikimedia.org/wikipedia/commons/c/c3/Elf_costume_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/b/b9/Elf_cartoon_icon.png
+Fantasy,Creature,Dragon,https://upload.wikimedia.org/wikipedia/commons/1/13/Komodo_dragon_head.jpg,https://upload.wikimedia.org/wikipedia/commons/e/e5/Dragon_cartoon_icon.png
+Fantasy,Creature,Unicorn,https://upload.wikimedia.org/wikipedia/commons/3/3b/Unicorn_tapestry.jpg,https://upload.wikimedia.org/wikipedia/commons/5/5c/Unicorn_cartoon_icon.png
+Fantasy,Creature,Ogre,https://upload.wikimedia.org/wikipedia/commons/f/f8/Ogre_statue.jpg,https://upload.wikimedia.org/wikipedia/commons/8/82/Ogre_cartoon_icon.png
+Fantasy,Creature,Fairy,https://upload.wikimedia.org/wikipedia/commons/5/5e/Fairy_costume_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/7/73/Fairy_cartoon_icon.png
+Fantasy,Location,Castle,https://upload.wikimedia.org/wikipedia/commons/7/74/Neuschwanstein_Castle.jpg,https://upload.wikimedia.org/wikipedia/commons/2/25/Castle_cartoon_icon.png
+Fantasy,Location,Enchanted Forest,https://upload.wikimedia.org/wikipedia/commons/0/0c/Mossy_forest.jpg,https://upload.wikimedia.org/wikipedia/commons/0/0d/Enchanted_forest_cartoon_icon.png
+Fantasy,Location,Cave,https://upload.wikimedia.org/wikipedia/commons/9/99/Large_cave_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/6/68/Cave_cartoon_icon.png
+Fantasy,Location,Kingdom,https://upload.wikimedia.org/wikipedia/commons/5/50/Mediaval_kingdom_map.jpg,https://upload.wikimedia.org/wikipedia/commons/f/fc/Kingdom_cartoon_icon.png
+Fantasy,Object,Magic Wand,https://upload.wikimedia.org/wikipedia/commons/f/f0/Magic_wand_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/2/2f/Magic_wand_cartoon_icon.png
+Fantasy,Object,Crown,https://upload.wikimedia.org/wikipedia/commons/1/12/Golden_crown_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/7/75/Crown_cartoon_icon.png
+Fantasy,Object,Treasure Chest,https://upload.wikimedia.org/wikipedia/commons/4/4f/Treasure_chest_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/3/3b/Treasure_chest_cartoon_icon.png
+Fantasy,Object,Shield,https://upload.wikimedia.org/wikipedia/commons/6/68/Knight_shield_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/8/8b/Shield_cartoon_icon.png
+Historical,Character,Pharaoh,https://upload.wikimedia.org/wikipedia/commons/4/4f/Tutankhamun_Mask.jpg,https://upload.wikimedia.org/wikipedia/commons/5/58/Pharaoh_cartoon_icon.png
+Historical,Character,Samurai,https://upload.wikimedia.org/wikipedia/commons/2/26/Samurai_with_katana.jpg,https://upload.wikimedia.org/wikipedia/commons/2/22/Samurai_cartoon_icon.png
+Historical,Character,Gladiator,https://upload.wikimedia.org/wikipedia/commons/8/82/Gladiator_statue.jpg,https://upload.wikimedia.org/wikipedia/commons/7/7d/Gladiator_cartoon_icon.png
+Historical,Character,Cowboy,https://upload.wikimedia.org/wikipedia/commons/7/7c/Cowboy_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/3/3c/Cowboy_cartoon_icon.png
+Historical,Location,Pyramids,https://upload.wikimedia.org/wikipedia/commons/e/e3/Kheops-Pyramid.jpg,https://upload.wikimedia.org/wikipedia/commons/c/c7/Pyramids_cartoon_icon.png
+Historical,Location,Colosseum,https://upload.wikimedia.org/wikipedia/commons/d/d5/Colosseum_in_Rome.jpg,https://upload.wikimedia.org/wikipedia/commons/7/7a/Colosseum_cartoon_icon.png
+Historical,Location,Medieval Village,https://upload.wikimedia.org/wikipedia/commons/f/fc/Medieval_village_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/9/95/Medieval_village_cartoon_icon.png
+Historical,Location,Wild West Town,https://upload.wikimedia.org/wikipedia/commons/b/bb/Old_west_town_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/5/5d/Wild_west_cartoon_icon.png
+Historical,Object,Scroll,https://upload.wikimedia.org/wikipedia/commons/6/61/Ancient_scroll_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/f/f3/Scroll_cartoon_icon.png
+Historical,Object,Sword,https://upload.wikimedia.org/wikipedia/commons/3/3f/Medieval_sword_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/5/59/Sword_cartoon_icon.png
+Historical,Object,Shield,https://upload.wikimedia.org/wikipedia/commons/7/76/Roman_shield_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/9/9a/Shield_cartoon_icon.png
+Historical,Object,Horse Carriage,https://upload.wikimedia.org/wikipedia/commons/3/3b/Horse_carriage_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/f/fd/Horse_carriage_cartoon_icon.png
+Non-Fiction,Character,Firefighter,https://upload.wikimedia.org/wikipedia/commons/6/64/Firefighter_in_action.jpg,https://upload.wikimedia.org/wikipedia/commons/f/f1/Firefighter_cartoon_icon.png
+Non-Fiction,Character,Doctor,https://upload.wikimedia.org/wikipedia/commons/1/16/Doctor_with_stethoscope.jpg,https://upload.wikimedia.org/wikipedia/commons/d/d2/Doctor_cartoon_icon.png
+Non-Fiction,Character,Police Officer,https://upload.wikimedia.org/wikipedia/commons/8/81/Police_officer_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/a/a9/Police_officer_cartoon_icon.png
+Non-Fiction,Character,Teacher,https://upload.wikimedia.org/wikipedia/commons/d/dc/Teacher_in_classroom.jpg,https://upload.wikimedia.org/wikipedia/commons/6/6e/Teacher_cartoon_icon.png
+Non-Fiction,Creature,Dinosaur,https://upload.wikimedia.org/wikipedia/commons/5/56/Tyrannosaurus_Rex_Holotype.jpg,https://upload.wikimedia.org/wikipedia/commons/0/0e/Dinosaur_cartoon_icon.png
+Non-Fiction,Creature,Lion,https://upload.wikimedia.org/wikipedia/commons/7/73/Lion_waiting_in_Namibia.jpg,https://upload.wikimedia.org/wikipedia/commons/2/2d/Lion_cartoon_icon.png
+Non-Fiction,Creature,Elephant,https://upload.wikimedia.org/wikipedia/commons/3/37/African_elephant_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/c/c6/Elephant_cartoon_icon.png
+Non-Fiction,Creature,Panda,https://upload.wikimedia.org/wikipedia/commons/0/0f/Giant_Panda_in_Beijing.jpg,https://upload.wikimedia.org/wikipedia/commons/1/14/Panda_cartoon_icon.png
+Non-Fiction,Location,Farm,https://upload.wikimedia.org/wikipedia/commons/5/59/Farm_in_England.jpg,https://upload.wikimedia.org/wikipedia/commons/3/34/Farm_cartoon_icon.png
+Non-Fiction,Location,City,https://upload.wikimedia.org/wikipedia/commons/c/c4/New_York_City_skyline.jpg,https://upload.wikimedia.org/wikipedia/commons/6/65/City_cartoon_icon.png
+Non-Fiction,Location,Mountain,https://upload.wikimedia.org/wikipedia/commons/e/e4/Mountain_in_Switzerland.jpg,https://upload.wikimedia.org/wikipedia/commons/3/3c/Mountain_cartoon_icon.png
+Non-Fiction,Location,Ocean,https://upload.wikimedia.org/wikipedia/commons/0/0a/Pacific_Ocean_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/2/2f/Ocean_cartoon_icon.png
+Non-Fiction,Object,Train,https://upload.wikimedia.org/wikipedia/commons/4/47/Passenger_train_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/9/9f/Train_cartoon_icon.png
+Non-Fiction,Object,Truck,https://upload.wikimedia.org/wikipedia/commons/1/1f/Truck_on_highway.jpg,https://upload.wikimedia.org/wikipedia/commons/f/fd/Truck_cartoon_icon.png
+Non-Fiction,Object,Plane,https://upload.wikimedia.org/wikipedia/commons/3/3f/Airplane_in_sky.jpg,https://upload.wikimedia.org/wikipedia/commons/5/59/Plane_cartoon_icon.png
+Non-Fiction,Object,School Bus,https://upload.wikimedia.org/wikipedia/commons/e/e7/School_bus_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/4/45/School_bus_cartoon_icon.png
+Sci-Fi,Character,Astronaut,https://upload.wikimedia.org/wikipedia/commons/c/c9/Astronaut_in_space.jpg,https://upload.wikimedia.org/wikipedia/commons/9/9a/Astronaut_cartoon_icon.png
+Sci-Fi,Character,Robot,https://upload.wikimedia.org/wikipedia/commons/e/e0/Humanoid_robot_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/d/de/Robot_cartoon_icon.png
+Sci-Fi,Character,Alien,https://upload.wikimedia.org/wikipedia/commons/4/42/Alien_exhibit_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/6/66/Alien_cartoon_icon.png
+Sci-Fi,Character,Space Captain,https://upload.wikimedia.org/wikipedia/commons/f/f7/Spaceship_captain_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/2/2c/Space_captain_cartoon_icon.png
+Sci-Fi,Creature,Martian,https://upload.wikimedia.org/wikipedia/commons/1/13/Martian_artwork.jpg,https://upload.wikimedia.org/wikipedia/commons/9/9f/Martian_cartoon_icon.png
+Sci-Fi,Creature,Space Worm,https://upload.wikimedia.org/wikipedia/commons/a/a9/Space_worm_artwork.jpg,https://upload.wikimedia.org/wikipedia/commons/e/e5/Space_worm_cartoon_icon.png
+Sci-Fi,Creature,Android,https://upload.wikimedia.org/wikipedia/commons/6/64/Android_robot_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/f/f5/Android_cartoon_icon.png
+Sci-Fi,Location,Space Station,https://upload.wikimedia.org/wikipedia/commons/7/76/International_Space_Station.jpg,https://upload.wikimedia.org/wikipedia/commons/3/3f/Space_station_cartoon_icon.png
+Sci-Fi,Location,Alien Planet,https://upload.wikimedia.org/wikipedia/commons/d/d3/Alien_planet_artwork.jpg,https://upload.wikimedia.org/wikipedia/commons/1/12/Alien_planet_cartoon_icon.png
+Sci-Fi,Location,Spaceship,https://upload.wikimedia.org/wikipedia/commons/6/66/Spaceship_in_orbit.jpg,https://upload.wikimedia.org/wikipedia/commons/6/68/Spaceship_cartoon_icon.png
+Sci-Fi,Object,Laser Gun,https://upload.wikimedia.org/wikipedia/commons/4/45/Laser_gun_prop.jpg,https://upload.wikimedia.org/wikipedia/commons/f/f8/Laser_gun_cartoon_icon.png
+Sci-Fi,Object,Jetpack,https://upload.wikimedia.org/wikipedia/commons/8/82/Jetpack_flight_test.jpg,https://upload.wikimedia.org/wikipedia/commons/3/3a/Jetpack_cartoon_icon.png
+Sci-Fi,Object,Space Helmet,https://upload.wikimedia.org/wikipedia/commons/7/7c/Apollo_space_helmet.jpg,https://upload.wikimedia.org/wikipedia/commons/4/4b/Space_helmet_cartoon_icon.png
+Sci-Fi,Object,Flying Saucer,https://upload.wikimedia.org/wikipedia/commons/6/62/Flying_saucer_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/8/88/Flying_saucer_cartoon_icon.png
+Spooky/Halloween,Character,Vampire,https://upload.wikimedia.org/wikipedia/commons/e/e9/Dracula_costume_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/3/3b/Vampire_cartoon_icon.png
+Spooky/Halloween,Character,Witch,https://upload.wikimedia.org/wikipedia/commons/6/6c/Witch_costume_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/f/f8/Witch_cartoon_icon.png
+Spooky/Halloween,Character,Ghost,https://upload.wikimedia.org/wikipedia/commons/3/3f/Ghost_costume_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/1/1e/Ghost_cartoon_icon.png
+Spooky/Halloween,Character,Zombie,https://upload.wikimedia.org/wikipedia/commons/2/28/Zombie_costume_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/b/b9/Zombie_cartoon_icon.png
+Spooky/Halloween,Creature,Bat,https://upload.wikimedia.org/wikipedia/commons/b/b4/Common_bat_in_flight.jpg,https://upload.wikimedia.org/wikipedia/commons/7/77/Bat_cartoon_icon.png
+Spooky/Halloween,Creature,Black Cat,https://upload.wikimedia.org/wikipedia/commons/3/3a/Black_cat_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/f/f7/Black_cat_cartoon_icon.png
+Spooky/Halloween,Creature,Spider,https://upload.wikimedia.org/wikipedia/commons/6/6c/Spider_on_web.jpg,https://upload.wikimedia.org/wikipedia/commons/1/1c/Spider_cartoon_icon.png
+Spooky/Halloween,Creature,Jack-o-Lantern,https://upload.wikimedia.org/wikipedia/commons/0/0c/Jack-o-lanterns_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/3/3c/Jack-o-lantern_cartoon_icon.png
+Spooky/Halloween,Location,Haunted House,https://upload.wikimedia.org/wikipedia/commons/5/52/Haunted_house_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/e/eb/Haunted_house_cartoon_icon.png
+Spooky/Halloween,Location,Graveyard,https://upload.wikimedia.org/wikipedia/commons/b/b8/Graveyard_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/2/26/Graveyard_cartoon_icon.png
+Spooky/Halloween,Location,Creepy Forest,https://upload.wikimedia.org/wikipedia/commons/3/39/Creepy_forest_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/0/0f/Creepy_forest_cartoon_icon.png
+Spooky/Halloween,Location,Full Moon,https://upload.wikimedia.org/wikipedia/commons/f/fb/Full_moon_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/5/5e/Full_moon_cartoon_icon.png
+Spooky/Halloween,Object,Cauldron,https://upload.wikimedia.org/wikipedia/commons/4/40/Cauldron_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/2/2b/Cauldron_cartoon_icon.png
+Spooky/Halloween,Object,Candle,https://upload.wikimedia.org/wikipedia/commons/0/0b/Candle_burning_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/7/73/Candle_cartoon_icon.png
+Spooky/Halloween,Object,Broomstick,https://upload.wikimedia.org/wikipedia/commons/1/1d/Broomstick_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/f/fc/Broomstick_cartoon_icon.png
+Spooky/Halloween,Object,Skull,https://upload.wikimedia.org/wikipedia/commons/0/0a/Human_skull_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/6/67/Skull_cartoon_icon.png
+Superheroes,Character,Superhero,https://upload.wikimedia.org/wikipedia/commons/0/07/Superhero_cosplay_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/1/15/Superhero_cartoon_icon.png
+Superheroes,Character,Sidekick,https://upload.wikimedia.org/wikipedia/commons/f/fc/Sidekick_costume_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/8/82/Sidekick_cartoon_icon.png
+Superheroes,Character,Supervillain,https://upload.wikimedia.org/wikipedia/commons/7/77/Supervillain_costume_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/2/29/Supervillain_cartoon_icon.png
+Superheroes,Character,Civilian,https://upload.wikimedia.org/wikipedia/commons/8/8c/Civilian_in_city.jpg,https://upload.wikimedia.org/wikipedia/commons/b/b7/Civilian_cartoon_icon.png
+Superheroes,Creature,Mutant,https://upload.wikimedia.org/wikipedia/commons/4/45/Mutant_artwork.jpg,https://upload.wikimedia.org/wikipedia/commons/0/0d/Mutant_cartoon_icon.png
+Superheroes,Creature,Monster,https://upload.wikimedia.org/wikipedia/commons/6/6b/Monster_artwork.jpg,https://upload.wikimedia.org/wikipedia/commons/5/5e/Monster_cartoon_icon.png
+Superheroes,Creature,Alien Invader,https://upload.wikimedia.org/wikipedia/commons/0/05/Alien_invasion_artwork.jpg,https://upload.wikimedia.org/wikipedia/commons/8/82/Alien_invader_cartoon_icon.png
+Superheroes,Creature,Robot Henchman,https://upload.wikimedia.org/wikipedia/commons/4/42/Robot_henchman_artwork.jpg,https://upload.wikimedia.org/wikipedia/commons/7/79/Robot_henchman_cartoon_icon.png
+Superheroes,Location,Secret Lair,https://upload.wikimedia.org/wikipedia/commons/c/c7/Secret_lair_artwork.jpg,https://upload.wikimedia.org/wikipedia/commons/2/29/Secret_lair_cartoon_icon.png
+Superheroes,Location,City Rooftop,https://upload.wikimedia.org/wikipedia/commons/d/d7/City_rooftop_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/c/c2/City_rooftop_cartoon_icon.png
+Superheroes,Location,Underground Base,https://upload.wikimedia.org/wikipedia/commons/8/8d/Underground_base_artwork.jpg,https://upload.wikimedia.org/wikipedia/commons/0/07/Underground_base_cartoon_icon.png
+Superheroes,Location,Skyscraper,https://upload.wikimedia.org/wikipedia/commons/b/bc/Skyscraper_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/d/d7/Skyscraper_cartoon_icon.png
+Superheroes,Object,Mask,https://upload.wikimedia.org/wikipedia/commons/3/39/Superhero_mask_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/9/9f/Mask_cartoon_icon.png
+Superheroes,Object,Cape,https://upload.wikimedia.org/wikipedia/commons/6/64/Superhero_cape_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/b/b9/Cape_cartoon_icon.png
+Superheroes,Object,Gadget,https://upload.wikimedia.org/wikipedia/commons/4/42/Superhero_gadget_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/0/0c/Gadget_cartoon_icon.png
+Superheroes,Object,Power Crystal,https://upload.wikimedia.org/wikipedia/commons/3/3b/Crystal_photo.jpg,https://upload.wikimedia.org/wikipedia/commons/1/1e/Crystal_cartoon_icon.png
