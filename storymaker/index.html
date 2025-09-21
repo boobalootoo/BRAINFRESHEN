@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Storytelling Image Generator</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
         body {
@@ -38,6 +37,15 @@
         .btn-object:hover { background-color: #059669; }
         .btn-all { background-color: #8b5cf6; }
         .btn-all:hover { background-color: #7c3aed; }
+        .btn-toggle {
+            @apply px-4 py-2 rounded-xl text-sm font-medium transition duration-200;
+        }
+        .btn-toggle.active {
+            @apply bg-indigo-500 text-white shadow-md;
+        }
+        .btn-toggle:not(.active) {
+            @apply bg-gray-200 text-gray-700 hover:bg-gray-300;
+        }
         .spinner {
             border: 4px solid rgba(255, 255, 255, 0.3);
             border-top: 4px solid #ffffff;
@@ -63,8 +71,13 @@
         <div class="mb-6">
             <label for="genre-select" class="block text-sm font-medium text-gray-700 mb-1">Select Genre</label>
             <select id="genre-select" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                <!-- Genres will populate dynamically from CSV -->
+                <!-- Options will be populated by JavaScript -->
             </select>
+        </div>
+
+        <div class="mb-6 flex justify-center space-x-4">
+            <button id="photo-toggle-btn" class="btn-toggle active" data-style="photo">Photo</button>
+            <button id="cartoon-toggle-btn" class="btn-toggle" data-style="cartoon">Cartoon</button>
         </div>
 
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
@@ -123,94 +136,169 @@
     </div>
 
     <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const genreSelect = document.getElementById('genre-select');
-        const buttons = {
-            character: document.getElementById('character-btn'),
-            creature: document.getElementById('creature-btn'),
-            location: document.getElementById('location-btn'),
-            object: document.getElementById('object-btn'),
-            all: document.getElementById('generate-all-btn')
-        };
+        document.addEventListener('DOMContentLoaded', () => {
+            const genreSelect = document.getElementById('genre-select');
+            const buttons = {
+                character: document.getElementById('character-btn'),
+                creature: document.getElementById('creature-btn'),
+                location: document.getElementById('location-btn'),
+                object: document.getElementById('object-btn'),
+                all: document.getElementById('generate-all-btn')
+            };
+            const styleButtons = {
+                photo: document.getElementById('photo-toggle-btn'),
+                cartoon: document.getElementById('cartoon-toggle-btn')
+            };
 
-        const displays = {
-            character: {
-                placeholder: document.getElementById('character-placeholder'),
-                spinner: document.getElementById('character-spinner'),
-                image: document.getElementById('character-image'),
-                error: document.getElementById('character-error')
-            },
-            creature: {
-                placeholder: document.getElementById('creature-placeholder'),
-                spinner: document.getElementById('creature-spinner'),
-                image: document.getElementById('creature-image'),
-                error: document.getElementById('creature-error')
-            },
-            location: {
-                placeholder: document.getElementById('location-placeholder'),
-                spinner: document.getElementById('location-spinner'),
-                image: document.getElementById('location-image'),
-                error: document.getElementById('location-error')
-            },
-            object: {
-                placeholder: document.getElementById('object-placeholder'),
-                spinner: document.getElementById('object-spinner'),
-                image: document.getElementById('object-image'),
-                error: document.getElementById('object-error')
+            const displays = {
+                character: {
+                    placeholder: document.getElementById('character-placeholder'),
+                    spinner: document.getElementById('character-spinner'),
+                    image: document.getElementById('character-image'),
+                    error: document.getElementById('character-error')
+                },
+                creature: {
+                    placeholder: document.getElementById('creature-placeholder'),
+                    spinner: document.getElementById('creature-spinner'),
+                    image: document.getElementById('creature-image'),
+                    error: document.getElementById('creature-error')
+                },
+                location: {
+                    placeholder: document.getElementById('location-placeholder'),
+                    spinner: document.getElementById('location-spinner'),
+                    image: document.getElementById('location-image'),
+                    error: document.getElementById('location-error')
+                },
+                object: {
+                    placeholder: document.getElementById('object-placeholder'),
+                    spinner: document.getElementById('object-spinner'),
+                    image: document.getElementById('object-image'),
+                    error: document.getElementById('object-error')
+                }
+            };
+
+            let imageUrls = {}; // This will be populated dynamically
+            let currentStyle = 'photo'; // Default style
+
+            async function initializeImageGenerator() {
+                const csvUrl = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/storymaker/info.csv';
+                try {
+                    const response = await fetch(csvUrl);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch CSV data from GitHub.');
+                    }
+                    const csvText = await response.text();
+                    parseCsv(csvText);
+                    populateGenres();
+                    setupEventListeners();
+                } catch (error) {
+                    console.error("Error loading CSV:", error);
+                    const errorMessage = document.createElement('div');
+                    errorMessage.textContent = 'Failed to load image data. Please check the console for details.';
+                    errorMessage.className = 'mt-4 p-4 rounded-xl bg-red-100 text-red-700';
+                    document.querySelector('.app-container').appendChild(errorMessage);
+                }
             }
-        };
 
-        let imageData = {};
-        const csvUrl = "https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/storymaker/info.csv";
+            function parseCsv(text) {
+                const lines = text.trim().split('\n');
+                imageUrls = {};
+                for (let i = 1; i < lines.length; i++) {
+                    const parts = lines[i].split(',');
+                    if (parts.length < 5) continue; 
 
-        Papa.parse(csvUrl, {
-            download: true,
-            header: true,
-            complete: function(results) {
-                results.data.forEach(row => {
-                    if (!row.Genre || !row.Category || !row.Image_URL) return;
-                    const genre = row.Genre.toLowerCase();
-                    const category = row.Category.toLowerCase();
-                    if (!imageData[genre]) imageData[genre] = {};
-                    if (!imageData[genre][category]) imageData[genre][category] = [];
-                    imageData[genre][category].push(row.Image_URL);
-                });
+                    const genre = parts[0].trim();
+                    const category = parts[1].trim().toLowerCase();
+                    const photoUrl = parts[3].trim();
+                    const cartoonUrl = parts[4].trim();
 
-                // populate genre dropdown
-                genreSelect.innerHTML = "";
-                Object.keys(imageData).sort().forEach(genre => {
+                    if (!imageUrls[genre]) {
+                        imageUrls[genre] = {};
+                    }
+                    if (!imageUrls[genre][category]) {
+                        imageUrls[genre][category] = [];
+                    }
+                    imageUrls[genre][category].push({
+                        photo: photoUrl,
+                        cartoon: cartoonUrl
+                    });
+                }
+            }
+
+            function populateGenres() {
+                const genres = Object.keys(imageUrls);
+                genreSelect.innerHTML = '';
+                genres.forEach(genre => {
                     const option = document.createElement('option');
                     option.value = genre;
-                    option.textContent = genre.charAt(0).toUpperCase() + genre.slice(1);
+                    option.textContent = genre;
                     genreSelect.appendChild(option);
                 });
-            },
-            error: function(err) { console.error("CSV load error:", err); }
+            }
+
+            function generateImage(category, style) {
+                const genre = genreSelect.value;
+                const urlList = imageUrls[genre] && imageUrls[genre][category] ? imageUrls[genre][category] : null;
+                
+                const display = displays[category];
+                display.placeholder.classList.add('hidden');
+                display.image.classList.add('hidden');
+                display.error.classList.add('hidden');
+                display.spinner.classList.remove('hidden');
+
+                if (urlList && urlList.length > 0) {
+                    const selectedItem = urlList[Math.floor(Math.random() * urlList.length)];
+                    const selectedUrl = selectedItem[style];
+                    
+                    const img = new Image();
+                    img.onload = () => {
+                        display.spinner.classList.add('hidden');
+                        display.image.src = selectedUrl;
+                        display.image.classList.remove('hidden');
+                    };
+                    img.onerror = () => {
+                        display.spinner.classList.add('hidden');
+                        display.error.textContent = 'Failed to load image.';
+                        display.error.classList.remove('hidden');
+                        display.placeholder.classList.remove('hidden');
+                    };
+                    img.src = selectedUrl;
+                } else {
+                    display.spinner.classList.add('hidden');
+                    display.error.textContent = 'No images found for this category and genre.';
+                    display.error.classList.remove('hidden');
+                    display.placeholder.classList.remove('hidden');
+                }
+            }
+
+            async function generateAll() {
+                const categories = ['character', 'creature', 'location', 'object'];
+                for (const category of categories) {
+                    await generateImage(category, currentStyle);
+                }
+            }
+
+            function setupEventListeners() {
+                buttons.character.addEventListener('click', () => generateImage('character', currentStyle));
+                buttons.creature.addEventListener('click', () => generateImage('creature', currentStyle));
+                buttons.location.addEventListener('click', () => generateImage('location', currentStyle));
+                buttons.object.addEventListener('click', () => generateImage('object', currentStyle));
+                buttons.all.addEventListener('click', generateAll);
+
+                styleButtons.photo.addEventListener('click', () => {
+                    currentStyle = 'photo';
+                    styleButtons.photo.classList.add('active');
+                    styleButtons.cartoon.classList.remove('active');
+                });
+                styleButtons.cartoon.addEventListener('click', () => {
+                    currentStyle = 'cartoon';
+                    styleButtons.cartoon.classList.add('active');
+                    styleButtons.photo.classList.remove('active');
+                });
+            }
+
+            initializeImageGenerator();
         });
-
-        function generateImage(category) {
-            const genre = genreSelect.value;
-            if (!imageData[genre] || !imageData[genre][category]) return;
-            const urlList = imageData[genre][category];
-            const selectedUrl = urlList[Math.floor(Math.random() * urlList.length)];
-
-            const display = displays[category];
-            display.placeholder.classList.add('hidden');
-            display.spinner.classList.add('hidden');
-            display.image.src = selectedUrl;
-            display.image.classList.remove('hidden');
-        }
-
-        function generateAll() {
-            ['character','creature','location','object'].forEach(generateImage);
-        }
-
-        buttons.character.addEventListener('click', () => generateImage('character'));
-        buttons.creature.addEventListener('click', () => generateImage('creature'));
-        buttons.location.addEventListener('click', () => generateImage('location'));
-        buttons.object.addEventListener('click', () => generateImage('object'));
-        buttons.all.addEventListener('click', generateAll);
-    });
     </script>
 </body>
 </html>
