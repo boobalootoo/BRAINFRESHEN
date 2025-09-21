@@ -1,0 +1,232 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Interactive Dice</title>
+  <style>
+    body {margin:0; background:#111; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh;}
+    .diceWrap {display:flex; align-items:center; gap:20px;}
+    .dice {width:120px; height:120px; border-radius:16px; background:#fff; display:grid; place-items:center; cursor:pointer;}
+    .pips {display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); width:100%; height:100%; padding:12px; box-sizing:border-box;}
+    .pip {width:20px; height:20px; border-radius:50%; background:#111; margin:auto;}
+    .symbol {font-size:48px; margin:0 10px; cursor:pointer;}
+    .answerBox {display:flex; justify-content:center; align-items: center; width: 260px; height: 120px; margin-top: 20px; background-color: #333; border-radius: 16px; position: relative;}
+    .pipGrid {display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px; opacity: 0.5;}
+    .pipOutline {width: 20px; height: 20px; border-radius: 50%; border: 2px dashed #fff; box-sizing: border-box; cursor: pointer;}
+    .pipOutline.filled {border: 2px solid #fff; background-color: #fff;}
+    .status {font-size: 32px; color: #fff; text-align: center; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);}
+    .shake-status {font-size: 18px; color: #fff; text-align: center; margin-bottom: 20px;}
+  </style>
+</head>
+<body>
+  <div class="shake-status" id="shakeStatus">Shake your phone to roll</div>
+  <div class="diceWrap">
+    <div class="dice" id="dice1" data-state="pips" data-value="1"></div>
+    <div class="symbol">+</div>
+    <div class="dice" id="dice2" data-state="pips" data-value="1"></div>
+    <div class="symbol">=</div>
+  </div>
+  <div class="answerBox" id="answerBox" data-state="pips">
+    <div class="pipGrid" id="pipGrid"></div>
+  </div>
+
+  <script>
+    const dice1 = document.getElementById('dice1');
+    const dice2 = document.getElementById('dice2');
+    const answerBox = document.getElementById('answerBox');
+    const pipGrid = document.getElementById('pipGrid');
+    const shakeStatus = document.getElementById('shakeStatus');
+    
+    const soundRoll = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3');
+    const soundTap = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3');
+
+    const speak = (text) => {
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1;
+            window.speechSynthesis.speak(utterance);
+        }
+    };
+
+    const haptics = () => {
+        if ('vibrate' in navigator) {
+            navigator.vibrate(200);
+        }
+    };
+
+    const words = ["one", "two", "three", "four", "five", "six"];
+    const numbers = ["1", "2", "3", "4", "5", "6"];
+    const totalWords = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+    const totalNumbers = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+
+    function renderPips(container, face) {
+      container.innerHTML = '';
+      const layouts = {
+        1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8]
+      };
+      const layout = layouts[face];
+      const pipsContainer = document.createElement('div');
+      pipsContainer.className = 'pips';
+      for (let i = 0; i < 9; i++) {
+        const cell = document.createElement('div');
+        cell.style.display = 'flex';
+        if (layout.includes(i)) {
+          const pip = document.createElement('div');
+          pip.className = 'pip';
+          cell.appendChild(pip);
+        }
+        pipsContainer.appendChild(cell);
+      }
+      container.appendChild(pipsContainer);
+    }
+
+    function createPipOutlines() {
+        pipGrid.innerHTML = '';
+        for (let i = 0; i < 12; i++) {
+            const pipOutline = document.createElement('div');
+            pipOutline.className = 'pipOutline';
+            pipOutline.dataset.index = i;
+            pipGrid.appendChild(pipOutline);
+        }
+    }
+
+    function rollDice() {
+      const a = Math.floor(Math.random() * 6) + 1;
+      const b = Math.floor(Math.random() * 6) + 1;
+      dice1.dataset.value = a;
+      dice2.dataset.value = b;
+      dice1.dataset.state = 'pips';
+      dice2.dataset.state = 'pips';
+      updateDiceDisplay(dice1);
+      updateDiceDisplay(dice2);
+      
+      createPipOutlines();
+      answerBox.dataset.state = 'pips';
+      answerBox.dataset.interactionState = 'pips';
+      
+      soundRoll.play();
+      haptics();
+      shakeStatus.textContent = "Tap to add pips or shake to roll again!";
+    }
+    
+    function updateDiceDisplay(diceElement) {
+      const value = parseInt(diceElement.dataset.value);
+      const state = diceElement.dataset.state;
+      diceElement.innerHTML = '';
+      if (state === 'pips') {
+        renderPips(diceElement, value);
+      } else if (state === 'number') {
+        diceElement.innerHTML = `<span class="symbol" style="color:#111;">${numbers[value-1]}</span>`;
+      } else if (state === 'written') {
+        diceElement.innerHTML = `<span class="symbol" style="color:#111; font-size: 2em;">${words[value-1]}</span>`;
+      }
+    }
+    
+    function updateAnswerBoxDisplay() {
+        const sum = parseInt(dice1.dataset.value) + parseInt(dice2.dataset.value);
+        let state = answerBox.dataset.interactionState;
+        answerBox.innerHTML = '';
+
+        if (state === 'pips') {
+            const pipGrid = document.createElement('div');
+            pipGrid.className = 'pipGrid';
+            for (let i = 0; i < 12; i++) {
+                const pipOutline = document.createElement('div');
+                pipOutline.className = 'pipOutline';
+                if (i < sum) {
+                    pipOutline.classList.add('filled');
+                }
+                pipGrid.appendChild(pipOutline);
+            }
+            answerBox.appendChild(pipGrid);
+        } else if (state === 'number') {
+            answerBox.innerHTML = `<span class="status">${totalNumbers[sum-1]}</span>`;
+        } else if (state === 'written') {
+            answerBox.innerHTML = `<span class="status">${totalWords[sum-1]}</span>`;
+        }
+    }
+    
+    function handleDiceClick(event) {
+      const dice = event.currentTarget;
+      let state = dice.dataset.state;
+      const value = parseInt(dice.dataset.value);
+
+      if (state === 'pips') {
+        dice.dataset.state = 'number';
+      } else if (state === 'number') {
+        dice.dataset.state = 'written';
+      } else if (state === 'written') {
+        speak(words[value-1]);
+        dice.dataset.state = 'spoken';
+      } else if (state === 'spoken') {
+        dice.dataset.state = 'pips';
+      }
+      updateDiceDisplay(dice);
+    }
+
+    function handlePipOutlineClick(event) {
+        if(answerBox.dataset.state !== 'pips') {
+            return;
+        }
+        const filledPips = pipGrid.querySelectorAll('.filled').length;
+        const sum = parseInt(dice1.dataset.value) + parseInt(dice2.dataset.value);
+        if (filledPips < sum) {
+            event.target.classList.add('filled');
+            soundTap.play();
+            if (filledPips + 1 === sum) {
+                answerBox.dataset.state = 'full';
+            }
+        }
+    }
+    
+    function handleAnswerBoxClick() {
+        if (answerBox.dataset.state !== 'full') return;
+
+        const sum = parseInt(dice1.dataset.value) + parseInt(dice2.dataset.value);
+        let state = answerBox.dataset.interactionState;
+
+        if (state === 'pips') {
+            answerBox.dataset.interactionState = 'number';
+            answerBox.innerHTML = `<span class="status">${totalNumbers[sum-1]}</span>`;
+        } else if (state === 'number') {
+            answerBox.dataset.interactionState = 'written';
+            answerBox.innerHTML = `<span class="status">${totalWords[sum-1]}</span>`;
+        } else if (state === 'written') {
+            speak(totalNumbers[sum-1]);
+            answerBox.dataset.interactionState = 'spoken';
+        } else if (state === 'spoken') {
+            rollDice();
+        }
+    }
+    
+    dice1.addEventListener('click', handleDiceClick);
+    dice2.addEventListener('click', handleDiceClick);
+    pipGrid.addEventListener('click', handlePipOutlineClick);
+    answerBox.addEventListener('click', handleAnswerBoxClick);
+
+    // Shake detection
+    let lastTime = 0;
+    let lastAcc = {x: 0, y: 0, z: 0};
+    const shakeThreshold = 25;
+    const timeThreshold = 1000;
+
+    window.addEventListener('devicemotion', (e) => {
+        const acc = e.accelerationIncludingGravity;
+        const now = Date.now();
+        const deltaAcc = Math.abs(acc.x - lastAcc.x) + Math.abs(acc.y - lastAcc.y) + Math.abs(acc.z - lastAcc.z);
+
+        if (deltaAcc > shakeThreshold && (now - lastTime) > timeThreshold) {
+            rollDice();
+            lastTime = now;
+        }
+
+        lastAcc = {x: acc.x, y: acc.y, z: acc.z};
+    });
+
+    rollDice();
+  </script>
+</body>
+</html>
+
