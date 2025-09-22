@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Sticker Book</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .page-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 75%; /* 4:3 aspect ratio */
+            background-size: cover;
+            background-position: center;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease-in-out;
+        }
+        .sticker-container {
+            position: absolute;
+            cursor: grab;
+            transition: transform 0.1s linear;
+        }
+        .sticker-container:active {
+            cursor: grabbing;
+        }
+        .page-counter {
+            background-color: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(5px);
+            border-radius: 9999px;
+        }
+        .sticker-drawer {
+            /* Custom styling for the scrollbar */
+            scrollbar-width: thin;
+            scrollbar-color: #9ca3af #e5e7eb;
+        }
+        .sticker-drawer::-webkit-scrollbar {
+            width: 8px;
+        }
+        .sticker-drawer::-webkit-scrollbar-track {
+            background: #e5e7eb;
+            border-radius: 10px;
+        }
+        .sticker-drawer::-webkit-scrollbar-thumb {
+            background-color: #9ca3af;
+            border-radius: 10px;
+            border: 2px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8 flex flex-col items-center min-h-screen">
+
+    <!-- Main Container -->
+    <div class="w-full max-w-5xl mx-auto flex flex-col lg:flex-row-reverse gap-6">
+
+        <!-- Sticker Drawer -->
+        <div class="bg-white p-4 rounded-3xl shadow-lg w-full lg:w-1/4 flex-shrink-0 lg:h-auto overflow-y-auto sticker-drawer">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Stickers</h2>
+            <div id="sticker-gallery" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                <!-- Stickers will be populated here by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Book and Controls Container -->
+        <div class="bg-gray-200 p-4 rounded-3xl shadow-lg w-full flex-grow flex flex-col items-center">
+            
+            <!-- Book container (page) -->
+            <div id="page-display" class="w-full max-w-4xl relative mb-4">
+                <div id="page-container" class="page-container bg-white flex items-center justify-center text-center text-gray-500 font-semibold">
+                    <span id="loading-message">Loading assets...</span>
+                    <!-- Stickers will be added here -->
+                </div>
+            </div>
+
+            <!-- Page Navigation -->
+            <div class="flex items-center justify-center gap-4 mt-4">
+                <button id="prev-btn" class="p-2 w-12 h-12 rounded-full bg-indigo-600 text-white shadow-md hover:bg-indigo-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <span id="page-counter" class="text-lg font-semibold text-gray-800 px-4 py-2 page-counter"></span>
+                <button id="next-btn" class="p-2 w-12 h-12 rounded-full bg-indigo-600 text-white shadow-md hover:bg-indigo-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+            
+        </div>
+        
+    </div>
+
+    <!-- Message Box -->
+    <div id="message-box" class="fixed top-8 right-8 bg-blue-500 text-white p-4 rounded-lg shadow-lg hidden z-50">
+        Message goes here.
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const pageContainer = document.getElementById('page-container');
+            const stickerGallery = document.getElementById('sticker-gallery');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const pageCounter = document.getElementById('page-counter');
+            const messageBox = document.getElementById('message-box');
+            const loadingMessage = document.getElementById('loading-message');
+
+            let currentPage = 0;
+            let pages = [];
+            let stickerTemplates = [];
+
+            let draggedSticker = null;
+            let currentStickerElement = null;
+            let initialX, initialY, initialLeft, initialTop;
+
+            const showMessage = (text) => {
+                messageBox.textContent = text;
+                messageBox.classList.remove('hidden');
+                setTimeout(() => {
+                    messageBox.classList.add('hidden');
+                }, 3000);
+            };
+
+            const renderPage = () => {
+                const pageData = pages[currentPage];
+                if (!pageData) return;
+                pageContainer.style.backgroundImage = `url('${pageData.background}')`;
+                
+                // Clear existing stickers on the page
+                pageContainer.innerHTML = '';
+                
+                // Add stickers saved for this page
+                pageData.stickers.forEach(sticker => {
+                    createAndAppendSticker(sticker);
+                });
+
+                updateButtons();
+                pageCounter.textContent = `Page ${currentPage + 1} / ${pages.length}`;
+            };
+
+            const updateButtons = () => {
+                prevBtn.disabled = currentPage === 0;
+                nextBtn.disabled = currentPage === pages.length - 1;
+            };
+
+            const createAndAppendSticker = (stickerData) => {
+                const stickerElement = document.createElement('div');
+                stickerElement.className = 'sticker-container absolute z-10 touch-none';
+                stickerElement.style.left = stickerData.x + '%';
+                stickerElement.style.top = stickerData.y + '%';
+                
+                stickerElement.innerHTML = `
+                    <img src="${stickerData.image}" alt="${stickerData.alt}" class="w-24 h-24 sm:w-32 sm:h-32 rounded-lg shadow-md">
+                `;
+
+                // Add event listeners for moving existing stickers
+                const handlePointerDown = (e) => {
+                    e.preventDefault();
+                    draggedSticker = stickerData;
+                    currentStickerElement = stickerElement;
+
+                    initialX = e.clientX || e.touches[0].clientX;
+                    initialY = e.clientY || e.touches[0].clientY;
+                    initialLeft = parseFloat(stickerElement.style.left);
+                    initialTop = parseFloat(stickerElement.style.top);
+
+                    document.addEventListener('pointermove', handlePointerMove);
+                    document.addEventListener('pointerup', handlePointerUp);
+                    
+                    document.addEventListener('touchmove', handlePointerMove);
+                    document.addEventListener('touchend', handlePointerUp);
+                };
+
+                stickerElement.addEventListener('pointerdown', handlePointerDown);
+                stickerElement.addEventListener('touchstart', handlePointerDown);
+
+                pageContainer.appendChild(stickerElement);
+            };
+
+            const populateStickerGallery = () => {
+                stickerGallery.innerHTML = ''; // Clear gallery first
+                stickerTemplates.forEach(sticker => {
+                    const stickerImage = document.createElement('img');
+                    stickerImage.src = sticker.image;
+                    stickerImage.alt = sticker.alt;
+                    stickerImage.className = 'w-full h-full object-cover rounded-lg shadow-md hover:scale-105 transition-transform duration-200 cursor-grab';
+                    stickerImage.draggable = true;
+                    stickerImage.dataset.name = sticker.name;
+                    stickerImage.dataset.image = sticker.image;
+                    stickerImage.dataset.alt = sticker.alt;
+
+                    stickerGallery.appendChild(stickerImage);
+                });
+            };
+            
+            const handlePointerMove = (e) => {
+                if (draggedSticker) {
+                    const clientX = e.clientX || e.touches[0].clientX;
+                    const clientY = e.clientY || e.touches[0].clientY;
+                    const dx = clientX - initialX;
+                    const dy = clientY - initialY;
+                    
+                    const newLeftPx = (initialLeft / 100) * pageContainer.offsetWidth + dx;
+                    const newTopPx = (initialTop / 100) * pageContainer.offsetHeight + dy;
+
+                    const newLeft = (newLeftPx / pageContainer.offsetWidth) * 100;
+                    const newTop = (newTopPx / pageContainer.offsetHeight) * 100;
+
+                    draggedSticker.x = Math.max(0, Math.min(100, newLeft));
+                    draggedSticker.y = Math.max(0, Math.min(100, newTop));
+
+                    currentStickerElement.style.left = draggedSticker.x + '%';
+                    currentStickerElement.style.top = draggedSticker.y + '%';
+                }
+            };
+            
+            const handlePointerUp = () => {
+                draggedSticker = null;
+                currentStickerElement = null;
+                document.removeEventListener('pointermove', handlePointerMove);
+                document.removeEventListener('pointerup', handlePointerUp);
+                document.removeEventListener('touchmove', handlePointerMove);
+                document.removeEventListener('touchend', handlePointerUp);
+            };
+
+            // Drag and drop listeners
+            stickerGallery.addEventListener('dragstart', (e) => {
+                if (e.target.tagName === 'IMG') {
+                    draggedSticker = {
+                        image: e.target.dataset.image,
+                        alt: e.target.dataset.alt,
+                        x: 0,
+                        y: 0
+                    };
+                }
+            });
+
+            pageContainer.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+
+            pageContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (draggedSticker) {
+                    const rect = pageContainer.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) / rect.width * 100;
+                    const y = (e.clientY - rect.top) / rect.height * 100;
+                    
+                    draggedSticker.x = x;
+                    draggedSticker.y = y;
+
+                    pages[currentPage].stickers.push(draggedSticker);
+                    renderPage(); // Re-render the page to show the new sticker
+                    showMessage(`Sticker added to page ${currentPage + 1}!`);
+
+                    draggedSticker = null;
+                }
+            });
+
+            // Navigation listeners
+            prevBtn.addEventListener('click', () => {
+                if (currentPage > 0) {
+                    currentPage--;
+                    renderPage();
+                }
+            });
+
+            nextBtn.addEventListener('click', () => {
+                if (currentPage < pages.length - 1) {
+                    currentPage++;
+                    renderPage();
+                }
+            });
+            
+            // Function to fetch and parse the CSV
+            const loadAssets = async () => {
+                try {
+                    const response = await fetch('https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/DIGISTICK/info.csv');
+                    const csvText = await response.text();
+                    
+                    const rows = csvText.trim().split('\n');
+                    const headers = rows[0].split(',');
+                    const data = rows.slice(1).map(row => {
+                        const values = row.split(',');
+                        return headers.reduce((object, header, index) => {
+                            object[header.trim()] = values[index].trim();
+                            return object;
+                        }, {});
+                    });
+
+                    // Populate pages and stickers from the fetched data
+                    const backgroundData = data.filter(item => item.Type === 'Background');
+                    const stickerData = data.filter(item => item.Type === 'Sticker');
+
+                    pages = backgroundData.map(bg => ({
+                        background: bg.URL,
+                        stickers: []
+                    }));
+                    
+                    stickerTemplates = stickerData.map(sticker => ({
+                        name: sticker.Name,
+                        image: sticker.URL,
+                        alt: `A sticker of a ${sticker.Name.toLowerCase()}.`
+                    }));
+
+                    loadingMessage.style.display = 'none'; // Hide loading message
+                    renderPage();
+                    populateStickerGallery();
+
+                } catch (error) {
+                    console.error('Error loading assets:', error);
+                    loadingMessage.textContent = 'Failed to load assets. Please check the URL and try again.';
+                }
+            };
+
+            // Initial render
+            loadAssets();
+        });
+    </script>
+
+</body>
+</html>
