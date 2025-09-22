@@ -1,0 +1,254 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phone Ruler + Compass + Magnifier</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      margin: 0;
+      height: 100vh;
+      background: #f0f0f0;
+      overflow: hidden;
+    }
+    .ruler {
+      background: white;
+      border: 1px solid #333;
+      margin: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .tick {
+      position: absolute;
+      background: #000;
+    }
+    #settings {
+      padding: 6px;
+      background: #fff;
+      border: 1px solid #333;
+      border-radius: 6px;
+      width: 95%;
+      box-sizing: border-box;
+      margin: 5px 0;
+    }
+    #horizontalRuler {
+      width: 100%;
+      height: 40px;
+    }
+    #verticalRuler {
+      flex-grow: 1;
+      width: 40px;
+      align-self: flex-start;
+    }
+    #content {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: row;
+      width: 100%;
+    }
+    #middleArea {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    #magnifier {
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 2px solid #333;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    #magnifier video {
+      position: absolute;
+      top: -200%;
+      left: -200%;
+      width: 500%;
+      height: 500%;
+      transform-origin: center;
+    }
+    #compass {
+      width: 200px;
+      height: 200px;
+      position: relative;
+    }
+    #bezel {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border: 4px solid #333;
+      border-radius: 50%;
+      box-sizing: border-box;
+      pointer-events: auto;
+      cursor: grab;
+      transform: rotate(0deg);
+    }
+    #bezel:active {
+      cursor: grabbing;
+    }
+    .degree-mark {
+      position: absolute;
+      width: 2px;
+      height: 10px;
+      background: #000;
+      top: 0;
+      left: 50%;
+      transform-origin: center 100px;
+    }
+    #needle {
+      position: absolute;
+      width: 2px;
+      height: 90px;
+      background: red;
+      top: 10px;
+      left: 50%;
+      transform-origin: bottom center;
+    }
+  </style>
+</head>
+<body>
+  <div id="settings">
+    <label>Screen Width (mm): <input type="number" id="screenWidth" min="1"></label>
+    <label>Screen Height (mm): <input type="number" id="screenHeight" min="1"></label>
+    <button id="saveBtn">Save</button>
+  </div>
+
+  <div id="horizontalRuler" class="ruler"></div>
+
+  <div id="content">
+    <div id="verticalRuler" class="ruler"></div>
+    <div id="middleArea">
+      <div id="magnifier"><video id="camera" autoplay playsinline></video></div>
+      <div id="compass">
+        <div id="needle"></div>
+        <div id="bezel"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function drawRuler(container, lengthMM, isHorizontal) {
+      container.innerHTML = "";
+      const dpi = window.devicePixelRatio * 96;
+      const mmToPx = dpi / 25.4;
+      const lengthPx = lengthMM * mmToPx;
+      if (isHorizontal) {
+        container.style.width = "100%";
+        container.style.height = "40px";
+        for (let mm = 0; mm <= lengthMM; mm++) {
+          const tick = document.createElement("div");
+          tick.className = "tick";
+          tick.style.left = (mm * mmToPx) + "px";
+          tick.style.top = "0";
+          tick.style.width = "1px";
+          tick.style.height = mm % 10 === 0 ? "40px" : (mm % 5 === 0 ? "25px" : "15px");
+          container.appendChild(tick);
+        }
+      } else {
+        container.style.height = "100%";
+        container.style.width = "40px";
+        for (let mm = 0; mm <= lengthMM; mm++) {
+          const tick = document.createElement("div");
+          tick.className = "tick";
+          tick.style.top = (mm * mmToPx) + "px";
+          tick.style.left = "0";
+          tick.style.height = "1px";
+          tick.style.width = mm % 10 === 0 ? "40px" : (mm % 5 === 0 ? "25px" : "15px");
+          container.appendChild(tick);
+        }
+      }
+    }
+
+    function saveSettings() {
+      const w = parseFloat(document.getElementById("screenWidth").value);
+      const h = parseFloat(document.getElementById("screenHeight").value);
+      if (w > 0 && h > 0) {
+        localStorage.setItem("screenWidthMM", w);
+        localStorage.setItem("screenHeightMM", h);
+        drawRulers();
+      }
+    }
+
+    function drawRulers() {
+      const w = parseFloat(localStorage.getItem("screenWidthMM"));
+      const h = parseFloat(localStorage.getItem("screenHeightMM"));
+      if (w && h) {
+        document.getElementById("screenWidth").value = w;
+        document.getElementById("screenHeight").value = h;
+        drawRuler(document.getElementById("horizontalRuler"), w, true);
+        drawRuler(document.getElementById("verticalRuler"), h, false);
+      }
+    }
+
+    document.getElementById("saveBtn").addEventListener("click", saveSettings);
+
+    // Load settings on startup
+    drawRulers();
+
+    // Camera feed for magnifier
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then(stream => {
+        document.getElementById("camera").srcObject = stream;
+      });
+
+    // Compass with rotatable bezel
+    const bezel = document.getElementById("bezel");
+    let isDragging = false, startAngle = 0, currentRotation = 0;
+
+    // Add degree marks to bezel
+    for (let deg = 0; deg < 360; deg += 10) {
+      const mark = document.createElement("div");
+      mark.className = "degree-mark";
+      mark.style.transform = `rotate(${deg}deg) translate(-50%, 0)`;
+      bezel.appendChild(mark);
+    }
+
+    bezel.addEventListener("mousedown", startRotate);
+    bezel.addEventListener("touchstart", startRotate);
+
+    function startRotate(e) {
+      e.preventDefault();
+      isDragging = true;
+      startAngle = getAngle(e) - currentRotation;
+      document.addEventListener("mousemove", rotate);
+      document.addEventListener("mouseup", stopRotate);
+      document.addEventListener("touchmove", rotate);
+      document.addEventListener("touchend", stopRotate);
+    }
+
+    function rotate(e) {
+      if (!isDragging) return;
+      const angle = getAngle(e);
+      currentRotation = angle - startAngle;
+      bezel.style.transform = `rotate(${currentRotation}deg)`;
+    }
+
+    function stopRotate() {
+      isDragging = false;
+      document.removeEventListener("mousemove", rotate);
+      document.removeEventListener("mouseup", stopRotate);
+      document.removeEventListener("touchmove", rotate);
+      document.removeEventListener("touchend", stopRotate);
+    }
+
+    function getAngle(e) {
+      const rect = bezel.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - cx;
+      const y = (e.touches ? e.touches[0].clientY : e.clientY) - cy;
+      return Math.atan2(y, x) * 180 / Math.PI;
+    }
+  </script>
+</body>
+</html>
+```
