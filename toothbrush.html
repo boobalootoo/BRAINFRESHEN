@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Teeth Brushing Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #212121;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            border-radius: 1rem;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+            touch-action: none; /* Prevent default touch behavior like scrolling */
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container">
+            <!-- The canvas will be appended here by Three.js -->
+        </div>
+    </div>
+
+    <script>
+        // Use a global variable for the app ID, falling back to a default if not defined.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        // Use a global variable for the Firebase configuration.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        
+        // --- Global Variables ---
+        let scene, camera, renderer;
+        let toothbrush, mouth, plaque = [];
+        let mouse = new THREE.Vector2();
+        let isBrushing = false;
+        const brushRadius = 0.5;
+
+        // --- Core Functions ---
+        
+        function init() {
+            // Set up the scene, camera, and renderer
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x212121, 1);
+            
+            // Append the canvas to the container
+            const canvasContainer = document.getElementById('canvas-container');
+            if (canvasContainer.firstChild) {
+                canvasContainer.removeChild(canvasContainer.firstChild);
+            }
+            canvasContainer.appendChild(renderer.domElement);
+
+            // Set initial camera position to face the mouth
+            camera.position.set(0, 0, -10);
+            camera.lookAt(0, 0, 0);
+
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 5, 5).normalize();
+            scene.add(directionalLight);
+
+            createMouthAndPlaque();
+            createToothbrush();
+
+            // Set up event listeners
+            renderer.domElement.addEventListener('mousedown', onPointerDown);
+            renderer.domElement.addEventListener('mousemove', onPointerMove);
+            renderer.domElement.addEventListener('mouseup', onPointerUp);
+            renderer.domElement.addEventListener('touchstart', onPointerDown);
+            renderer.domElement.addEventListener('touchmove', onPointerMove);
+            renderer.domElement.addEventListener('touchend', onPointerUp);
+            window.addEventListener('resize', onWindowResize);
+
+            // Start animation loop
+            animate();
+        }
+
+        function createMouthAndPlaque() {
+            // Main group for the mouth
+            mouth = new THREE.Group();
+            scene.add(mouth);
+
+            // Create gum line
+            const gumGeometry = new THREE.TorusGeometry(3.5, 0.5, 16, 100); 
+            const gumMaterial = new THREE.MeshStandardMaterial({ color: 0xe67399, roughness: 0.8 });
+            const topGum = new THREE.Mesh(gumGeometry, gumMaterial);
+            topGum.rotation.x = Math.PI / 2;
+            topGum.position.y = 2.0;
+            topGum.rotation.z = Math.PI;
+            mouth.add(topGum);
+
+            const bottomGum = new THREE.Mesh(gumGeometry, gumMaterial);
+            bottomGum.rotation.x = Math.PI / 2;
+            bottomGum.position.y = -2.0;
+            mouth.add(bottomGum);
+
+            // A helper function to create a single tooth with variable size
+            const createTooth = (x, y, z, width, depth) => {
+                const toothGeometry = new THREE.BoxGeometry(width, 1, depth);
+                const toothMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.8, metalness: 0.1 });
+                const tooth = new THREE.Mesh(toothGeometry, toothMaterial);
+                tooth.position.set(x, y, z);
+                mouth.add(tooth);
+                return tooth;
+            };
+
+            // Define the positions for a more realistic dental arch
+            const teethPositions = [
+                // Upper Jaw
+                { x: 0, y: 5, z: -2.8, width: 0.7, depth: 0.7 },
+                { x: 0.8, y: 0.5, z: -2.7, width: 0.6, depth: 0.6 },
+                { x: -0.8, y: 1.2, z: -2.7, width: 0.6, depth: 0.6 },
+                { x: 1.5, y: 1, z: -2.4, width: 0.5, depth: 0.5 },
+                { x: -1.5, y: 1.2, z: -2.4, width: 0.5, depth: 0.5 },
+                { x: 2.2, y: 1.2, z: -2.0, width: 0.9, depth: 0.9 },
+                { x: -2.2, y: 1.2, z: -2.0, width: 0.9, depth: 0.9 },
+                { x: 2.9, y: 1.2, z: -1.4, width: 1.0, depth: 1.0 },
+                { x: -2.9, y: 1.2, z: -1.4, width: 1.0, depth: 1.0 },
+                
+                // Lower Jaw
+                { x: 0, y: -1.2, z: -2.8, width: 0.7, depth: 0.7 },
+                { x: 0.8, y: -1.2, z: -2.7, width: 0.6, depth: 0.6 },
+                { x: -0.8, y: -1.2, z: -2.7, width: 0.6, depth: 0.6 },
+                { x: 1.5, y: -1.2, z: -2.4, width: 0.5, depth: 0.5 },
+                { x: -1.5, y: -1.2, z: -2.4, width: 0.5, depth: 0.5 },
+                { x: 2.2, y: -1.2, z: -2.0, width: 0.9, depth: 0.9 },
+                { x: -2.2, y: -1.2, z: -2.0, width: 0.9, depth: 0.9 },
+                { x: 2.9, y: -1.2, z: -1.4, width: 1.0, depth: 1.0 },
+                { x: -2.9, y: -1.2, z: -1.4, width: 1.0, depth: 1.0 },
+            ];
+
+            const teeth = [];
+            teethPositions.forEach(pos => {
+                // Adjust the vertical position to embed the teeth correctly within the gums
+                const toothY = pos.y > 0 ? 1.7 : -1.7;
+                const tooth = createTooth(pos.x, toothY, pos.z, pos.width, pos.depth);
+                teeth.push(tooth);
+            });
+
+            const plaqueMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+            const plaqueGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            plaque = [];
+
+            teeth.forEach(tooth => {
+                // Add plaque to each tooth
+                for (let i = 0; i < 20; i++) {
+                    const plaqueSphere = new THREE.Mesh(plaqueGeometry, plaqueMaterial);
+                    const offsetX = (Math.random() - 0.5) * tooth.geometry.parameters.width * 0.8;
+                    const offsetY = (Math.random() - 0.5) * tooth.geometry.parameters.height * 0.8;
+                    const offsetZ = (Math.random() - 0.5) * tooth.geometry.parameters.depth * 0.8;
+                    plaqueSphere.position.set(tooth.position.x + offsetX, tooth.position.y + offsetY, tooth.position.z + offsetZ);
+                    
+                    scene.add(plaqueSphere);
+                    plaque.push(plaqueSphere);
+                }
+            });
+        }
+
+        function createToothbrush() {
+            // Main group for the toothbrush
+            toothbrush = new THREE.Group();
+            
+            // Toothbrush handle (more realistic shape)
+            const handleGeometry = new THREE.CylinderGeometry(0.3, 0.4, 5, 16);
+            const handleMaterial = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.5 });
+            const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+            handle.rotation.z = Math.PI / 2;
+            handle.position.x = -2;
+            
+            // Toothbrush head
+            const headGeometry = new THREE.BoxGeometry(0.7, 2, 0.5);
+            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xc4c4c4, roughness: 0.5 });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.rotation.z = Math.PI / 2;
+            head.position.x = 1.2;
+            head.position.y = -0.3;
+
+            // Bristles (a separate group for better control)
+            const bristles = new THREE.Group();
+            const bristleMaterial = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
+            const bristleGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.5);
+            for (let i = 0; i < 20; i++) {
+                const bristle = new THREE.Mesh(bristleGeometry, bristleMaterial);
+                bristle.position.x = Math.random() * 0.5 - 0.25;
+                bristle.position.y = Math.random() * 1.5 - 0.75;
+                bristle.position.z = -0.25;
+                bristles.add(bristle);
+            }
+            bristles.rotation.z = Math.PI / 2;
+            bristles.position.set(1.2, -0.3, 0.25);
+
+            toothbrush.add(handle, head, bristles);
+            scene.add(toothbrush);
+            
+            // Initial position and rotation
+            toothbrush.position.set(0, 0, -5); // Position the toothbrush in front of the mouth
+            toothbrush.rotation.z = Math.PI / 4;
+        }
+
+        function onPointerDown(event) {
+            isBrushing = true;
+        }
+
+        function onPointerUp(event) {
+            isBrushing = false;
+        }
+
+        function onPointerMove(event) {
+            if (!isBrushing) return;
+
+            // Get normalized device coordinates (-1 to +1)
+            const clientX = event.clientX || (event.touches ? event.touches[0].clientX : 0);
+            const clientY = event.clientY || (event.touches ? event.touches[0].clientY : 0);
+            
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = - (clientY / window.innerHeight) * 2 + 1;
+
+            // Create a raycaster to project the mouse position into the 3D scene
+            const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
+            vector.unproject(camera);
+            
+            // Move toothbrush based on the mouse position
+            const dir = vector.sub(camera.position).normalize();
+            const distance = -camera.position.z / dir.z;
+            const pos = camera.position.clone().add(dir.multiplyScalar(distance));
+            
+            toothbrush.position.x = pos.x;
+            toothbrush.position.y = pos.y;
+            
+            checkCollisions();
+        }
+
+        function checkCollisions() {
+            const toothbrushPosition = new THREE.Vector3();
+            // Get world position of the brush head
+            toothbrush.children[2].getWorldPosition(toothbrushPosition);
+            
+            // Filter out already removed plaque
+            plaque = plaque.filter(p => p.parent !== null);
+            
+            plaque.forEach(p => {
+                const distance = toothbrushPosition.distanceTo(p.position);
+                if (distance < brushRadius) {
+                    scene.remove(p);
+                }
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            animationId = requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        // --- Initialize on window load ---
+        window.onload = function() {
+            init();
+        };
+
+    </script>
+</body>
+</html>
