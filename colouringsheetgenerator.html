@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Outline Colouring Maker</title>
+  <style>
+    :root{--bg:#0f172a;--card:#0b1220;--muted:#94a3b8;--accent:#60a5fa}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:linear-gradient(180deg,#071024 0%, #041025 100%);color:#e6eef8}
+    .wrap{max-width:1100px;margin:20px auto;padding:18px}
+    header{display:flex;gap:16px;align-items:center}
+    h1{margin:0;font-size:20px}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+    .card{background:rgba(255,255,255,0.03);padding:12px;border-radius:10px;box-shadow:0 4px 18px rgba(2,6,23,0.6)}
+    button,input,select{background:transparent;border:1px solid rgba(255,255,255,0.08);color:inherit;padding:8px;border-radius:8px}
+    label{font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center}
+    .canvas-wrap{display:flex;gap:12px;flex-wrap:wrap}
+    .stage{background:#fff;border-radius:10px;padding:8px}
+    canvas{display:block;max-width:780px;width:100%;height:auto;border-radius:6px;background:transparent}
+    .tools{display:flex;gap:8px;align-items:center}
+    .slim{padding:6px 8px}
+    footer{margin-top:14px;color:var(--muted);font-size:13px}
+    .hint{font-size:13px;color:#cbd5e1}
+    #msg{margin-left:12px;font-size:13px;color:#aee}
+    .meta{font-size:13px;color:#cbd5e1;margin-top:8px}
+    .small{font-size:12px;color:#9fb0c8}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Outline Colouring Maker</h1>
+      <div class="hint">Upload a photo → make outline → paint or bucket-fill → download</div>
+      <div id="msg" aria-live="polite"></div>
+    </header>
+
+    <div class="controls">
+      <div class="card">
+        <label>Upload image <input id="file" type="file" accept="image/*"></label>
+        <div class="meta" id="fileInfo">No file chosen.</div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <button id="loadSample" class="slim">Load sample photo</button>
+          <button id="loadSilhouette" class="slim">Load sample silhouette</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <label>Edge sensitivity: <input id="threshold" type="range" min="6" max="60" value="18"></label>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+          <button id="makeOutline" class="slim">Make outline</button>
+          <button id="clearOutline" class="slim">Clear</button>
+        </div>
+        <div class="small" style="margin-top:8px">If an image fails to load, try the sample buttons to verify the app works. If the sample also fails, copy the console error to the chat.</div>
+      </div>
+
+      <div class="card tools">
+        <label>Tool:
+          <select id="tool">
+            <option value="brush">Brush</option>
+            <option value="fill">Bucket fill</option>
+            <option value="eraser">Eraser</option>
+          </select>
+        </label>
+        <label>Colour: <input id="color" type="color" value="#ff4d6d"></label>
+        <label>Size: <input id="size" type="range" min="1" max="80" value="18"></label>
+        <button id="undo" class="slim">Undo</button>
+        <button id="download" class="slim">Download PNG</button>
+      </div>
+
+      <div class="card">
+        <label><input type="checkbox" id="downscale" checked> Downscale large images</label>
+        <label style="margin-top:6px">Max dimension: <input id="maxDim" type="number" min="256" max="4096" value="1024" style="width:110px;margin-left:8px"></label>
+        <div class="small" style="margin-top:6px">Downscaling helps performance and reduces chance of canvas-size errors.</div>
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <div class="stage" style="flex:1;min-width:280px;">
+        <div style="font-size:13px;color:#0f172a;margin-bottom:6px">Colour layer (paint here)</div>
+        <canvas id="paintCanvas" width="800" height="600" style="background:white"></canvas>
+      </div>
+
+      <div class="stage" style="flex:1;min-width:280px;">
+        <div style="font-size:13px;color:#0f172a;margin-bottom:6px">Outline (generated)</div>
+        <canvas id="outlineCanvas" width="800" height="600" style="background:transparent"></canvas>
+      </div>
+    </div>
+
+    <footer>
+      Tips: Use brush to paint, bucket to fill regions, eraser to remove. If an image doesn't load, try the sample images or a different file type (JPEG/PNG). If problems persist, paste the console error here.
+    </footer>
+  </div>
+
+<script>
+// Robust Outline Colouring Maker — improved image-load diagnostics and sample tests
+const fileInput = document.getElementById('file');
+const outlineCanvas = document.getElementById('outlineCanvas');
+const paintCanvas = document.getElementById('paintCanvas');
+const makeBtn = document.getElementById('makeOutline');
+const clearBtn = document.getElementById('clearOutline');
+const thresholdRange = document.getElementById('threshold');
+const toolSel = document.getElementById('tool');
+const colorInput = document.getElementById('color');
+const sizeRange = document.getElementById('size');
+const downloadBtn = document.getElementById('download');
+const undoBtn = document.getElementById('undo');
+const msgEl = document.getElementById('msg');
+const fileInfo = document.getElementById('fileInfo');
+const loadSampleBtn = document.getElementById('loadSample');
+const loadSilhouetteBtn = document.getElementById('loadSilhouette');
+const downscaleCheck = document.getElementById('downscale');
+const maxDimInput = document.getElementById('maxDim');
+
+const outCtx = outlineCanvas.getContext('2d');
+const paintCtx = paintCanvas.getContext('2d');
+
+let img = null; // loaded Image object
+let originalW = 0, originalH = 0;
+let lastObjectURL = null;
+let stack = [];
+
+function setMessage(text, isError = false){
+  msgEl.textContent = text || '';
+  msgEl.style.color = isError ? '#ffb4b4' : '#aee';
+  console.log('[OutlineMaker]', text);
+}
+
+function setFileInfo(text){ fileInfo.textContent = text || 'No file chosen.'; }
+
+function clampCanvasSize(v){
+  // clamp to reasonable max to avoid browser exceptions
+  const max = 4096; // conservative
+  return Math.max(1, Math.min(max, Math.floor(v)));
+}
+
+function revokeLastURL(){ if(lastObjectURL){ try{ URL.revokeObjectURL(lastObjectURL); }catch(e){} lastObjectURL = null; } }
+
+// Load an Image from a File/Blob with fallbacks and diagnostics
+function loadImageFromFile(file){
+  return new Promise((resolve, reject) => {
+    if(!file){ reject(new Error('No file supplied')); return; }
+    const info = `${file.name || 'unnamed'} — ${file.type || 'unknown type'} — ${Math.round(file.size/1024)} KB`;
+    setFileInfo(info);
+    setMessage('Starting load: ' + info);
+
+    const image = new Image();
+    image.crossOrigin = 'Anonymous'; // attempt anonymous to avoid taint when possible
+
+    let cleanedUp = false;
+    function done(err){
+      if(cleanedUp) return; cleanedUp = true; revokeLastURL();
+      if(err) reject(err); else resolve(image);
+    }
+
+    image.onload = ()=>{
+      // loaded successfully
+      originalW = image.naturalWidth || image.width;
+      originalH = image.naturalHeight || image.height;
+      setMessage(`Loaded image: ${originalW}×${originalH}`);
+      done(null);
+    };
+
+    image.onerror = (ev)=>{
+      console.warn('Image onerror', ev);
+      // fallback: try reading as DataURL (FileReader)
+      setMessage('Image load failed — trying fallback (read as data URL)...', true);
+      try{
+        const reader = new FileReader();
+        reader.onerror = (re)=>{ console.error('FileReader error', re); done(new Error('FileReader error')); };
+        reader.onload = ()=>{
+          try{
+            image.onload = ()=>{ originalW = image.naturalWidth || image.width; originalH = image.naturalHeight || image.height; setMessage(`Loaded from data URL: ${originalW}×${originalH}`); done(null); };
+            image.onerror = (e2)=>{ console.error('Image load from dataURL failed', e2); done(new Error('Image load from data URL failed')); };
+            image.src = reader.result;
+          }catch(err){ console.error('setting image.src to dataURL failed', err); done(err); }
+        };
+        reader.readAsDataURL(file);
+      }catch(err){
+        console.error('Fallback FileReader failed', err);
+        done(err || new Error('Unknown image load error'));
+      }
+    };
+
+    // primary attempt: createObjectURL
+    try{
+      revokeLastURL();
+      const url = URL.createObjectURL(file);
+      lastObjectURL = url;
+      image.src = url;
+      // Note: resolution will be handled in onload
+    }catch(e){
+      console.error('createObjectURL failed', e);
+      // try FileReader immediately
+      try{
+        const reader = new FileReader();
+        reader.onload = ()=>{ image.src = reader.result; };
+        reader.onerror = (rerr)=>{ console.error('FileReader onerror', rerr); reject(rerr); };
+        reader.readAsDataURL(file);
+      }catch(err){ reject(err); }
+    }
+  });
+}
+
+// Helper to load an SVG string as an image (used for samples)
+function loadImageFromSVGString(svgString){
+  return new Promise((resolve,reject)=>{
+    const image = new Image();
+    image.crossOrigin = 'Anonymous';
+    image.onload = ()=>{ originalW = image.naturalWidth || image.width; originalH = image.naturalHeight || image.height; resolve(image); };
+    image.onerror = (e)=>{ reject(e); };
+    const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+    image.src = dataUrl;
+  });
+}
+
+// Public handlers
+fileInput.addEventListener('change', async (e)=>{
+  const f = e.target.files && e.target.files[0];
+  if(!f){ setMessage('No file selected', true); setFileInfo('No file chosen.'); return; }
+  try{
+    img = null; setMessage('');
+    const loaded = await loadImageFromFile(f);
+    img = loaded;
+    // prepare canvases to show loaded image size (but don't process yet)
+    const w = clampCanvasSize(originalW);
+    const h = clampCanvasSize(originalH);
+    resizeCanvases(w,h);
+    outCtx.clearRect(0,0,outlineCanvas.width,outlineCanvas.height);
+    paintCtx.fillStyle = '#ffffff'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+    setMessage('Image ready. Click "Make outline" to generate.');
+  }catch(err){
+    console.error('load error', err);
+    setMessage('Image load error: ' + (err && err.message ? err.message : 'unknown'), true);
+  }
+});
+
+loadSampleBtn.addEventListener('click', async ()=>{
+  // small colourful SVG as a sample photo
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='600'>
+    <rect width='100%' height='100%' fill='#f0f7ff'/>
+    <circle cx='200' cy='200' r='120' fill='#ffd166'/>
+    <rect x='360' y='120' width='220' height='220' rx='28' fill='#ef476f'/>
+    <g transform='translate(520,340)'><ellipse rx='160' ry='80' fill='#06d6a0'/></g>
+    <text x='40' y='560' font-family='sans-serif' font-size='24' fill='#333'>Sample photo — use this to test loading</text>
+  </svg>`;
+  try{
+    img = await loadImageFromSVGString(svg);
+    const w = clampCanvasSize(originalW || 800);
+    const h = clampCanvasSize(originalH || 600);
+    resizeCanvases(w,h);
+    outCtx.clearRect(0,0,outlineCanvas.width,outlineCanvas.height);
+    paintCtx.fillStyle = '#ffffff'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+    setFileInfo('Sample photo'); setMessage('Sample loaded — click "Make outline".');
+  }catch(e){ console.error('sample load failed', e); setMessage('Sample load failed: ' + (e && e.message), true); }
+});
+
+loadSilhouetteBtn.addEventListener('click', async ()=>{
+  // simple silhouette SVG
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='600'>
+    <rect width='100%' height='100%' fill='white'/>
+    <path d='M200 450 Q300 120 400 300 T600 420 Q500 520 400 480 T200 450' fill='black'/>
+    <text x='40' y='560' font-family='sans-serif' font-size='24' fill='#333'>Sample silhouette</text>
+  </svg>`;
+  try{
+    img = await loadImageFromSVGString(svg);
+    const w = clampCanvasSize(originalW || 800);
+    const h = clampCanvasSize(originalH || 600);
+    resizeCanvases(w,h);
+    outCtx.clearRect(0,0,outlineCanvas.width,outlineCanvas.height);
+    paintCtx.fillStyle = '#ffffff'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+    setFileInfo('Sample silhouette'); setMessage('Sample silhouette loaded — click "Make outline".');
+  }catch(e){ console.error('sample silhouette failed', e); setMessage('Sample load failed: ' + (e && e.message), true); }
+});
+
+// Resize canvases safely
+function resizeCanvases(w,h){
+  const cw = clampCanvasSize(w); const ch = clampCanvasSize(h);
+  [outlineCanvas, paintCanvas].forEach(c=>{ c.width = cw; c.height = ch; });
+  // reset paint layer to white
+  paintCtx.save(); paintCtx.fillStyle = '#ffffff'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height); paintCtx.restore();
+}
+
+// Main outline generation
+async function makeOutline(){
+  if(!img || !img.complete){ setMessage('No image loaded. Upload a file or use a sample first.', true); return; }
+  const srcW = originalW || img.naturalWidth || img.width;
+  const srcH = originalH || img.naturalHeight || img.height;
+  if(!srcW || !srcH){ setMessage('Image has invalid dimensions.', true); return; }
+
+  makeBtn.disabled = true;
+  setMessage('Generating outline — processing...');
+
+  // compute processing size (downscale if requested)
+  let maxDim = parseInt(maxDimInput.value,10) || 1024;
+  if(!downscaleCheck.checked) maxDim = Math.max(srcW, srcH);
+  const scale = Math.min(1, maxDim / Math.max(srcW, srcH));
+  const w = clampCanvasSize(Math.max(1, Math.floor(srcW * scale)));
+  const h = clampCanvasSize(Math.max(1, Math.floor(srcH * scale)));
+
+  // temporary canvas
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tctx = tmp.getContext('2d');
+
+  // draw image into tmp (scale if needed)
+  try{
+    tctx.clearRect(0,0,w,h);
+    tctx.drawImage(img, 0, 0, w, h);
+  }catch(e){
+    console.error('drawImage failed', e);
+    setMessage('Error drawing image to temporary canvas. The image may contain external references or be tainted (SVGs with external resources).', true);
+    makeBtn.disabled = false; return;
+  }
+
+  // grab pixels
+  let imageData;
+  try{ imageData = tctx.getImageData(0,0,w,h); }catch(e){ console.error('getImageData failed', e); setMessage('Unable to access image pixels. If this is an SVG or remote image, cross-origin restrictions may block processing. Try uploading a PNG/JPEG from your device.', true); makeBtn.disabled = false; return; }
+
+  // convert to grayscale
+  const gray = new Uint8ClampedArray(w*h);
+  for(let i=0, p=0;i<imageData.data.length;i+=4,p++){
+    const r = imageData.data[i], g = imageData.data[i+1], b = imageData.data[i+2];
+    gray[p] = (0.299*r + 0.587*g + 0.114*b) | 0;
+  }
+
+  // blur then sobel
+  blurGray(gray,w,h,1);
+  const edges = sobel(gray,w,h);
+  const threshold = Math.max(0, Math.min(255, parseInt(thresholdRange.value,10) || 18));
+
+  // resize output canvases to processing size
+  resizeCanvases(w,h);
+
+  let outImg;
+  try{ outImg = outCtx.createImageData(w,h); }catch(e){ console.error('createImageData failed', e); setMessage('Failed to create output image; canvas may be too large for your browser.', true); makeBtn.disabled = false; return; }
+
+  // write output: black lines where edge magnitude > threshold
+  for(let i=0;i<w*h;i++){
+    const v = edges[i]; const idx = i*4;
+    if(v > threshold){ outImg.data[idx]=0; outImg.data[idx+1]=0; outImg.data[idx+2]=0; outImg.data[idx+3]=255; }
+    else { outImg.data[idx]=0; outImg.data[idx+1]=0; outImg.data[idx+2]=0; outImg.data[idx+3]=0; }
+  }
+
+  try{ outCtx.putImageData(outImg,0,0); }catch(e){ console.error('putImageData failed', e); setMessage('Failed to write outline to canvas.', true); makeBtn.disabled = false; return; }
+
+  setMessage('Outline generated — paint on the left canvas.');
+  makeBtn.disabled = false;
+}
+
+function clearOutline(){
+  if(outlineCanvas.width>0 && outlineCanvas.height>0) outCtx.clearRect(0,0,outlineCanvas.width,outlineCanvas.height);
+  if(paintCanvas.width>0 && paintCanvas.height>0){ paintCtx.fillStyle='#ffffff'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height); }
+  setMessage('Cleared.');
+}
+
+makeBtn.addEventListener('click', makeOutline);
+clearBtn.addEventListener('click', clearOutline);
+
+// simple box blur on gray array
+function blurGray(arr,w,h,r){ if(r<=0) return; const tmp = new Uint8ClampedArray(arr.length); for(let y=0;y<h;y++){ for(let x=0;x<w;x++){ let tot=0,cnt=0; for(let oy=-r;oy<=r;oy++) for(let ox=-r;ox<=r;ox++){ const nx=x+ox, ny=y+oy; if(nx>=0&&nx<w&&ny>=0&&ny<h){ tot+=arr[ny*w+nx]; cnt++; } } tmp[y*w+x]=Math.round(tot/cnt); } } arr.set(tmp); }
+
+// sobel operator
+function sobel(gray,w,h){ const out = new Uint8ClampedArray(w*h); const gx=[-1,0,1,-2,0,2,-1,0,1]; const gy=[-1,-2,-1,0,0,0,1,2,1]; for(let y=1;y<h-1;y++){ for(let x=1;x<w-1;x++){ let sx=0,sy=0,k=0; for(let ky=-1;ky<=1;ky++){ for(let kx=-1;kx<=1;kx++){ const val = gray[(y+ky)*w + (x+kx)]; sx += gx[k]*val; sy += gy[k]*val; k++; } } const mag = Math.hypot(sx,sy); out[y*w+x] = Math.min(255, Math.round(mag)); } } return out; }
+
+// Painting tools (unchanged behaviour)
+let painting=false, last={x:0,y:0}; let tool='brush'; let color='#ff4d6d'; let size=18;
+toolSel.addEventListener('change',e=> tool=e.target.value); colorInput.addEventListener('input',e=> color=e.target.value); sizeRange.addEventListener('input',e=> size=parseInt(e.target.value,10));
+
+paintCanvas.addEventListener('pointerdown', e=>{
+  if(paintCanvas.width === 0 || paintCanvas.height === 0) return;
+  const rect = paintCanvas.getBoundingClientRect();
+  const x = Math.round((e.clientX - rect.left) * (paintCanvas.width/rect.width));
+  const y = Math.round((e.clientY - rect.top) * (paintCanvas.height/rect.height));
+  if(tool==='fill'){ saveState(); floodFill(paintCtx, x, y, hexToRgba(color)); }
+  else if(tool==='brush' || tool==='eraser'){ painting=true; last={x,y}; saveState(); drawLine(last.x,last.y,x,y); }
+});
+
+paintCanvas.addEventListener('pointermove', e=>{ if(!painting) return; const rect = paintCanvas.getBoundingClientRect(); const x = Math.round((e.clientX - rect.left) * (paintCanvas.width/rect.width)); const y = Math.round((e.clientY - rect.top) * (paintCanvas.height/rect.height)); drawLine(last.x,last.y,x,y); last={x,y}; });
+window.addEventListener('pointerup', ()=> painting=false);
+
+function drawLine(x1,y1,x2,y2){ paintCtx.lineJoin='round'; paintCtx.lineCap='round'; paintCtx.lineWidth = size; if(tool==='eraser'){ paintCtx.globalCompositeOperation='destination-out'; paintCtx.strokeStyle='rgba(0,0,0,1)'; } else { paintCtx.globalCompositeOperation='source-over'; paintCtx.strokeStyle = color; } paintCtx.beginPath(); paintCtx.moveTo(x1+0.5,y1+0.5); paintCtx.lineTo(x2+0.5,y2+0.5); paintCtx.stroke(); }
+
+// Flood fill
+function floodFill(ctx, startX, startY, fillColor){ const w = ctx.canvas.width, h = ctx.canvas.height; if(!w||!h) return; let imgData; try{ imgData = ctx.getImageData(0,0,w,h); }catch(e){ console.error('getImageData in floodFill failed', e); setMessage('Flood fill failed: cannot access canvas pixels.', true); return; } const data = imgData.data; const offset = (y,x) => (y*w + x)*4; if(startX < 0 || startX >= w || startY < 0 || startY >= h) return; const startIdx = offset(startY,startX); const target = [data[startIdx], data[startIdx+1], data[startIdx+2], data[startIdx+3]]; const fill = fillColor; if(target[0]===fill[0]&&target[1]===fill[1]&&target[2]===fill[2]&&target[3]===fill[3]) return; const stackLocal=[[startX,startY]]; while(stackLocal.length){ const [x,y] = stackLocal.pop(); if(x<0||x>=w||y<0||y>=h) continue; const idx = offset(y,x); if(data[idx]===target[0]&&data[idx+1]===target[1]&&data[idx+2]===target[2]&&data[idx+3]===target[3]){ data[idx]=fill[0]; data[idx+1]=fill[1]; data[idx+2]=fill[2]; data[idx+3]=fill[3]; stackLocal.push([x+1,y]); stackLocal.push([x-1,y]); stackLocal.push([x,y+1]); stackLocal.push([x,y-1]); } } try{ ctx.putImageData(imgData,0,0); }catch(e){ console.error('putImageData in floodFill failed', e); setMessage('Flood fill failed to write pixels.', true); } }
+
+function hexToRgba(hex){ const h = hex.replace('#',''); const bigint = parseInt(h,16); const r = (bigint >> 16) & 255; const g = (bigint >> 8) & 255; const b = bigint & 255; return [r,g,b,255]; }
+
+// Undo stack
+function saveState(){ if(paintCanvas.width === 0 || paintCanvas.height === 0) return; try{ const data = paintCtx.getImageData(0,0,paintCanvas.width,paintCanvas.height); stack.push(data); if(stack.length>20) stack.shift(); }catch(e){ console.warn('unable to save state',e); } }
+undoBtn.addEventListener('click', ()=>{ if(stack.length===0) return; const data = stack.pop(); paintCtx.putImageData(data,0,0); });
+
+// Download
+downloadBtn.addEventListener('click', ()=>{ if(paintCanvas.width === 0 || paintCanvas.height === 0){ setMessage('Nothing to download.', true); return; } const out = document.createElement('canvas'); out.width = paintCanvas.width; out.height = paintCanvas.height; const ctx = out.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,out.width,out.height); ctx.drawImage(paintCanvas,0,0); ctx.drawImage(outlineCanvas,0,0); const url = out.toDataURL('image/png'); const a = document.createElement('a'); a.href = url; a.download = 'colouring.png'; a.click(); });
+
+// Init white background
+paintCtx.fillStyle = '#ffffff'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+
+// regenerate outline on threshold change if image exists
+thresholdRange.addEventListener('input', ()=>{ if(img && img.complete) makeOutline(); });
+
+</script>
+</body>
+</html>
