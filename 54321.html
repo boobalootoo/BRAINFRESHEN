@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Body Parts</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+            color: #1e293b;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            text-align: center;
+            overflow: hidden;
+        }
+        .container {
+            width: 90%;
+            max-width: 600px;
+            padding: 2rem;
+            background-color: #ffffff;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.5s ease-in-out;
+        }
+        .body-part-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .body-part {
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+            width: 100px;
+            height: 100px;
+        }
+        .gif-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div id="body-parts-container" class="body-part-container">
+            <!-- Body parts will be added here by JavaScript -->
+        </div>
+        <div id="breathing-container" class="hidden gif-container mt-8">
+            <!-- The GIF will be added here by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('body-parts-container');
+            const breathingContainer = document.getElementById('breathing-container');
+
+            const bodyParts = [
+                { type: 'eyes', count: 5, emoji: '👁️' },
+                { type: 'ears', count: 4, emoji: '👂' },
+                { type: 'noses', count: 3, emoji: '👃' },
+                { type: 'hands', count: 2, emoji: '✋' }
+            ];
+
+            let currentPartIndex = 0;
+            let partsLeft = bodyParts[currentPartIndex].count;
+
+            const updateDisplay = () => {
+                container.innerHTML = ''; // Clear existing parts
+                const currentPart = bodyParts[currentPartIndex];
+                if (currentPart) {
+                    for (let i = 0; i < currentPart.count; i++) {
+                        const part = document.createElement('div');
+                        part.className = 'body-part text-6xl';
+                        part.innerHTML = currentPart.emoji;
+                        part.addEventListener('click', () => {
+                            if (partsLeft > 0) {
+                                part.style.transform = 'scale(0)';
+                                part.style.opacity = '0';
+                                partsLeft--;
+                                setTimeout(() => {
+                                    if (partsLeft === 0) {
+                                        currentPartIndex++;
+                                        if (currentPartIndex < bodyParts.length) {
+                                            partsLeft = bodyParts[currentPartIndex].count;
+                                            setTimeout(() => updateDisplay(), 500);
+                                        } else {
+                                            // All parts are gone, start the breathing animation
+                                            container.innerHTML = '';
+                                            breathingContainer.classList.remove('hidden');
+                                            breathingContainer.classList.add('flex');
+
+                                            // Embed the Tenor GIF using its official embed code
+                                            breathingContainer.innerHTML = '<div class="tenor-gif-embed" data-postid="13249129873710408593" data-share-method="host" data-aspect-ratio="1" data-width="100%"><a href="https://tenor.com/view/pengu-pudgy-penguin-pudgypenguins-breathe-in-gif-13249129873710408593">Pengu Pudgy Sticker</a>from <a href="https://tenor.com/search/pengu-stickers">Pengu Stickers</a></div>';
+
+                                            // Add the Tenor script to the body to activate the embed
+                                            const tenorScript = document.createElement('script');
+                                            tenorScript.src = 'https://tenor.com/embed.js';
+                                            tenorScript.async = true;
+                                            document.body.appendChild(tenorScript);
+                                        }
+                                    }
+                                }, 200);
+                            }
+                        });
+                        container.appendChild(part);
+                    }
+                }
+            };
+
+            updateDisplay();
+        });
+    </script>
+
+</body>
+</html>
+
