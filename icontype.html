@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kids' Keyboard</title>
+    <!--
+      Load Tailwind CSS from a CDN for utility-first styling.
+      This makes the design responsive and modern with minimal custom CSS.
+    -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Define the font family for the entire body */
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Custom styles for the output strip to ensure it is a thin line at the top */
+        .output-strip {
+            height: 64px; /* Larger fixed height for the output strip */
+            -ms-overflow-style: none;  /* Hide scrollbar for IE and Edge */
+            scrollbar-width: none;  /* Hide scrollbar for Firefox */
+        }
+        /* Hide scrollbar for Webkit browsers (Chrome, Safari) */
+        .output-strip::-webkit-scrollbar {
+            display: none;
+        }
+
+        /*
+          The main keyboard container uses flexbox to wrap content.
+          It uses align-content: flex-start to keep the rows from stretching.
+        */
+        #keyboard-container {
+            display: none; /* Initially hidden until age is selected */
+            flex-wrap: wrap;
+            align-content: flex-start;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        /*
+          Base styles for all keyboard buttons.
+          - Larger font and padding for little fingers.
+          - flex-grow-0 and flex-shrink-0 ensure they don't stretch.
+        */
+        .keyboard-btn {
+            @apply m-0 rounded-none text-3xl md:text-4xl font-medium cursor-pointer transition-all duration-200 ease-in-out select-none flex-grow-0 flex-shrink-0
+                   shadow-sm hover:shadow-md active:shadow-inner;
+            padding: 1.5rem 2rem;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        /* Color-coding based on data-type attribute */
+        .noun { @apply bg-blue-400 text-white hover:bg-blue-500; }
+        .verb { @apply bg-green-400 text-white hover:bg-green-500; }
+        .adjective { @apply bg-red-400 text-white hover:bg-red-500; }
+        .other { @apply bg-gray-300 text-gray-800 hover:bg-gray-400; }
+        .action { @apply bg-blue-600 text-white hover:bg-blue-700; }
+
+        /* Styles for the welcome screen buttons */
+        .age-select-btn {
+            @apply p-6 bg-blue-500 text-white text-3xl font-bold rounded-xl shadow-lg hover:bg-blue-600 transition-colors duration-200;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col h-screen overflow-hidden">
+
+    <!-- Welcome screen for age selection -->
+    <div id="welcome-screen" class="flex flex-col items-center justify-center flex-grow p-4 text-center">
+        <h1 class="text-4xl md:text-5xl font-extrabold text-gray-800 mb-8">Select Your Age</h1>
+        <div class="flex flex-col md:flex-row gap-6">
+            <button class="age-select-btn" data-age="0-2">Ages 0-2</button>
+            <button class="age-select-btn" data-age="3-5">Ages 3-5</button>
+        </div>
+    </div>
+
+    <!-- The output area, initially hidden -->
+    <div id="output-area" class="flex flex-col md:flex-row p-2 bg-white shadow-md flex-shrink-0 hidden">
+        <div class="flex flex-col flex-grow">
+            <!-- Output strip for words -->
+            <div id="output-strip" class="output-strip px-4 text-2xl md:text-3xl text-gray-800 overflow-x-auto whitespace-nowrap flex-grow flex items-center">
+                <span id="output-text" class="min-w-full"></span>
+            </div>
+            <!-- Output strip for emojis -->
+            <div id="emoji-output-strip" class="output-strip px-4 text-3xl md:text-4xl text-gray-800 overflow-x-auto whitespace-nowrap flex-grow flex items-center">
+                <span id="emoji-output-text" class="min-w-full"></span>
+            </div>
+        </div>
+        <!-- Speaker button -->
+        <button id="speak-all-btn" class="bg-green-500 hover:bg-green-600 text-white text-5xl p-2 md:p-4 rounded-xl shadow-lg transition-colors duration-200 flex items-center justify-center m-2 flex-shrink-0">
+            🗣️
+        </button>
+    </div>
+
+    <!-- The main keyboard area, fills the remaining vertical space -->
+    <div id="keyboard-container" class="flex-grow p-2">
+        <!-- Buttons will be generated here by JavaScript -->
+    </div>
+
+    <script>
+        // Get references to the main containers
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const outputArea = document.getElementById('output-area');
+        const outputStrip = document.getElementById('output-strip');
+        const keyboardContainer = document.getElementById('keyboard-container');
+        const outputText = document.getElementById('output-text');
+        const emojiOutputText = document.getElementById('emoji-output-text');
+        const speakAllBtn = document.getElementById('speak-all-btn');
+
+        // Data for each age group
+        const wordData = {
+            '0-2': [
+                { word: "mom", icon: "👩", type: "noun" },
+                { word: "dad", icon: "👨", type: "noun" },
+                { word: "cat", icon: "🐱", type: "noun" },
+                { word: "dog", icon: "🐶", type: "noun" },
+                { word: "ball", icon: "⚽", type: "noun" },
+                { word: "toy", icon: "🧸", type: "noun" },
+                { word: "milk", icon: "🥛", type: "noun" },
+                { word: "car", icon: "🚗", type: "noun" },
+                { word: "cup", icon: "🥤", type: "noun" },
+                { word: "go", icon: "➡️", type: "verb" },
+                { word: "eat", icon: "🍽️", type: "verb" },
+                { word: "drink", icon: "💧", type: "verb" },
+                { word: "play", icon: "🤸", type: "verb" },
+                { word: "sleep", icon: "😴", type: "verb" },
+                { word: "big", icon: "🐘", type: "adjective" },
+                { word: "small", icon: "🐜", type: "adjective" },
+                { word: "happy", icon: "😊", type: "adjective" },
+                { word: "sad", icon: "😥", type: "adjective" },
+                { word: "hello", icon: "👋", type: "other" },
+                { word: "bye", icon: "👋", type: "other" },
+                { word: "yes", icon: "👍", type: "other" },
+                { word: "no", icon: "👎", type: "other" },
+                { word: ".", icon: ".", type: "other", isPunctuation: true },
+                { word: "?", icon: "?", type: "other", isPunctuation: true },
+            ],
+            '3-5': [
+                { word: "friend", icon: "👫", type: "noun" },
+                { word: "school", icon: "🏫", type: "noun" },
+                { word: "house", icon: "🏠", type: "noun" },
+                { word: "dinosaur", icon: "🦖", type: "noun" },
+                { word: "robot", icon: "🤖", type: "noun" },
+                { word: "book", icon: "📖", type: "noun" },
+                { word: "apple", icon: "🍎", type: "noun" },
+                { word: "banana", icon: "🍌", type: "noun" },
+                { word: "bike", icon: "🚲", type: "noun" },
+                { word: "jump", icon: "🤸", type: "verb" },
+                { word: "run", icon: "🏃", type: "verb" },
+                { word: "sing", icon: "🎤", type: "verb" },
+                { word: "dance", icon: "💃", type: "verb" },
+                { word: "read", icon: "📖", type: "verb" },
+                { word: "write", icon: "✍️", type: "verb" },
+                { word: "draw", icon: "🎨", type: "verb" },
+                { word: "fast", icon: "⚡", type: "adjective" },
+                { word: "slow", icon: "🐢", type: "adjective" },
+                { word: "loud", icon: "📢", type: "adjective" },
+                { word: "quiet", icon: "🤫", type: "adjective" },
+                { word: "long", icon: "📏", type: "adjective" },
+                { word: "short", icon: "✂️", type: "adjective" },
+                { word: "red", icon: "🔴", type: "adjective" },
+                { word: "blue", icon: "🔵", type: "adjective" },
+                { word: "please", icon: "🙏", type: "other" },
+                { word: "thank you", icon: "😊", type: "other" },
+                { word: "sorry", icon: "😔", type: "other" },
+                { word: ".", icon: ".", type: "other", isPunctuation: true },
+                { word: "?", icon: "?", type: "other", isPunctuation: true },
+                { word: "!", icon: "❗", type: "other", isPunctuation: true },
+            ]
+        };
+
+        // State variables to track state
+        let isCapsOn = false;
+        let mode = 0; // 0: words, 1: icons, 2: both
+        let capsButton = null;
+
+        // Check for browser support for speech synthesis
+        const speechSupported = 'speechSynthesis' in window;
+        if (!speechSupported) {
+            console.log('Speech Synthesis not supported in this browser.');
+        }
+
+        // Function to create and render the keyboard buttons
+        function renderKeyboard(ageGroup) {
+            keyboardContainer.innerHTML = ''; // Clear previous buttons
+            const buttonsData = wordData[ageGroup];
+
+            // Add action buttons
+            const actionButtons = [
+                { word: "Caps", action: "caps", type: "action" },
+                { word: "Space", action: "space", type: "action" },
+                { word: "Backspace", action: "backspace", type: "action" },
+                { word: "Clear All", action: "clear", type: "action" },
+                { word: "Show Icons", action: "toggle-mode", type: "action", id: "mode-toggle" }
+            ];
+
+            buttonsData.forEach(item => {
+                const button = document.createElement('button');
+                button.className = `keyboard-btn ${item.type}`;
+                button.dataset.word = item.word;
+                button.dataset.icon = item.icon;
+                button.dataset.type = item.type;
+                if (item.isPunctuation) {
+                    button.dataset.isPunctuation = 'true';
+                }
+                button.innerHTML = `<span class="word">${item.word}</span><span class="icon hidden">${item.icon}</span>`;
+                keyboardContainer.appendChild(button);
+            });
+
+            actionButtons.forEach(item => {
+                const button = document.createElement('button');
+                button.className = `keyboard-btn ${item.type}`;
+                button.textContent = item.word;
+                button.dataset.action = item.action;
+                button.dataset.type = item.type;
+                if (item.id) {
+                    button.id = item.id;
+                }
+                keyboardContainer.appendChild(button);
+            });
+
+            capsButton = document.querySelector('[data-action="caps"]');
+            updateDisplayMode(); // Ensure the mode is set correctly after rendering
+        }
+
+        // Function to update the display mode
+        function updateDisplayMode() {
+            const keyboardButtons = document.querySelectorAll('.keyboard-btn[data-word]');
+            const modeToggleButton = document.getElementById('mode-toggle');
+            if (!modeToggleButton) return;
+
+            keyboardButtons.forEach(button => {
+                const wordSpan = button.querySelector('.word');
+                const iconSpan = button.querySelector('.icon');
+                if (!wordSpan || !iconSpan) return;
+
+                // Remove previous classes
+                button.classList.remove('flex', 'flex-col', 'items-center', 'justify-center');
+                wordSpan.classList.remove('hidden', 'text-sm');
+                iconSpan.classList.remove('hidden', 'text-3xl', 'md:text-4xl');
+
+                if (mode === 0) { // Words only
+                    wordSpan.classList.remove('hidden');
+                    iconSpan.classList.add('hidden');
+                    modeToggleButton.textContent = 'Show Icons';
+                } else if (mode === 1) { // Icons only
+                    wordSpan.classList.add('hidden');
+                    iconSpan.classList.remove('hidden');
+                    iconSpan.classList.add('text-3xl', 'md:text-4xl');
+                    modeToggleButton.textContent = 'Show Both';
+                } else if (mode === 2) { // Both words and icons
+                    wordSpan.classList.remove('hidden');
+                    iconSpan.classList.remove('hidden');
+                    button.classList.add('flex', 'flex-col', 'items-center', 'justify-center');
+                    wordSpan.classList.add('text-sm');
+                    iconSpan.classList.add('text-xl');
+                    modeToggleButton.textContent = 'Show Words';
+                }
+            });
+        }
+
+        // Event listener for age selection buttons
+        document.querySelectorAll('.age-select-btn').forEach(button => {
+            button.addEventListener('click', (event) => {
+                const age = event.target.dataset.age;
+                welcomeScreen.style.display = 'none';
+                outputArea.classList.remove('hidden');
+                keyboardContainer.style.display = 'flex';
+                renderKeyboard(age);
+            });
+        });
+
+        // Event listener for the speaker button
+        speakAllBtn.addEventListener('click', () => {
+            if (speechSupported && outputText.textContent.trim() !== '') {
+                const utterance = new SpeechSynthesisUtterance(outputText.textContent.trim());
+                window.speechSynthesis.speak(utterance);
+            }
+        });
+
+        // Add a click listener to the entire keyboard container for efficiency
+        keyboardContainer.addEventListener('click', (event) => {
+            const clickedButton = event.target.closest('.keyboard-btn');
+            if (!clickedButton) {
+                return;
+            }
+
+            const action = clickedButton.dataset.action;
+            let word = clickedButton.dataset.word;
+            let icon = clickedButton.dataset.icon;
+            const isPunctuation = clickedButton.dataset.isPunctuation;
+
+            // Handle actions first
+            if (action === 'caps') {
+                isCapsOn = !isCapsOn;
+                capsButton.classList.toggle('bg-orange-400', isCapsOn);
+                capsButton.classList.toggle('text-white', isCapsOn);
+                return; // Exit early as no word is added
+            } else if (action === 'space') {
+                outputText.textContent += ' ';
+                emojiOutputText.textContent += ' ';
+            } else if (action === 'backspace') {
+                let currentText = outputText.textContent;
+                let currentEmojiText = emojiOutputText.textContent;
+                const lastSpaceIndex = currentText.trimEnd().lastIndexOf(' ');
+                
+                if (lastSpaceIndex !== -1) {
+                    outputText.textContent = currentText.substring(0, lastSpaceIndex + 1);
+                    emojiOutputText.textContent = currentEmojiText.substring(0, currentEmojiText.trimEnd().lastIndexOf(' ') + 1);
+                } else {
+                    outputText.textContent = '';
+                    emojiOutputText.textContent = '';
+                }
+            } else if (action === 'clear') {
+                outputText.textContent = '';
+                emojiOutputText.textContent = '';
+            } else if (action === 'toggle-mode') {
+                mode = (mode + 1) % 3;
+                updateDisplayMode();
+                return;
+            } else if (word) {
+                if (isCapsOn) {
+                    word = word.charAt(0).toUpperCase() + word.slice(1);
+                    isCapsOn = false;
+                    capsButton.classList.remove('bg-orange-400', 'text-white');
+                }
+
+                if (isPunctuation) {
+                    outputText.textContent = outputText.textContent.trimEnd() + word;
+                    emojiOutputText.textContent = emojiOutputText.textContent.trimEnd() + icon;
+                } else {
+                    outputText.textContent += word;
+                    emojiOutputText.textContent += icon;
+                }
+
+                if (!isPunctuation) {
+                    outputText.textContent += ' ';
+                    emojiOutputText.textContent += ' ';
+                }
+
+                // Speak the word out loud
+                if (speechSupported && word.trim() !== '') {
+                    const utterance = new SpeechSynthesisUtterance(word.trim());
+                    window.speechSynthesis.speak(utterance);
+                }
+            }
+
+            // Scroll to the end of the output strip to show the latest text
+            outputStrip.scrollLeft = outputStrip.scrollWidth;
+            emojiOutputText.parentElement.scrollLeft = emojiOutputText.parentElement.scrollWidth;
+        });
+    </script>
+</body>
+</html>
+
