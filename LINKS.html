@@ -6,7 +6,7 @@
     <title>Categorized Project Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
     <style>
         body {
@@ -72,13 +72,19 @@
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
+        /* Custom card focus style */
+        .card-main-area:focus {
+            outline: 2px solid theme('colors.blue.500');
+            outline-offset: 2px;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body class="p-4 sm:p-8">
 
 <div class="max-w-6xl mx-auto bg-white p-6 sm:p-8 rounded-3xl shadow-2xl">
     <h1 class="text-3xl sm:text-4xl font-extrabold text-center mb-4 text-gray-900">EY Project Dashboard</h1>
-    <p class="text-center text-gray-600 mb-8">Links are grouped by category for easy finding. Click a card to preview the site.</p>
+    <p class="text-center text-gray-600 mb-8">Click the main card area for a preview, or the blue button to open in a full new tab.</p>
 
     <!-- Modal window -->
     <div id="urlModal" class="modal">
@@ -87,6 +93,7 @@
                 <div class="flex-1 overflow-hidden pr-10">
                      <p id="modalTitle" class="text-lg sm:text-xl font-bold text-white truncate"></p>
                 </div>
+                <!-- Close button -->
                 <span class="close" style="right: 15px; top: 50%; transform: translateY(-50%);">&times;</span>
             </div>
             <iframe id="urlIframe" class="modal-iframe w-full h-full" frameborder="0"></iframe>
@@ -165,7 +172,7 @@
 
         categoryOrder.forEach(category => {
             const sites = groupedUrls[category];
-            if (!sites || sites.length === 0) return; // Skip if category is empty
+            if (!sites || sites.length === 0) return;
 
             // 1. Create Category Heading
             const categorySection = document.createElement('section');
@@ -176,7 +183,7 @@
             categorySection.appendChild(divider);
             
             const header = document.createElement('h2');
-            header.className = 'text-2xl font-extrabold text-gray-800 mb-6 px-2 py-1 rounded-lg inline-block bg-blue-100';
+            header.className = 'text-2xl font-extrabold text-gray-800 mb-6 px-3 py-1 rounded-lg inline-block bg-blue-100 shadow-md';
             header.textContent = category;
             categorySection.appendChild(header);
 
@@ -185,10 +192,19 @@
             gridContainer.className = 'category-grid';
 
             sites.forEach(site => {
-                // Create the main button/card element
-                const button = document.createElement('button');
-                button.className = 'w-full p-5 bg-white text-left border border-gray-200 rounded-xl shadow-lg hover:bg-blue-50 hover:shadow-xl transition-all duration-300 flex flex-col justify-start items-start space-y-2 cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-300';
+                // Outer card container
+                const card = document.createElement('div');
+                card.className = 'bg-white border border-gray-200 rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl flex flex-col justify-between';
 
+                // Main Clickable Area (for Modal Preview)
+                const mainArea = document.createElement('button');
+                mainArea.className = 'card-main-area w-full p-5 text-left flex flex-col justify-start items-start space-y-2 cursor-pointer bg-white rounded-t-xl';
+                mainArea.onclick = () => {
+                    urlIframe.src = site.url;
+                    modalTitle.textContent = site.title + ' Preview';
+                    urlModal.style.display = 'flex';
+                };
+                
                 // Card Title
                 const title = document.createElement('h3');
                 title.className = 'text-xl font-bold text-blue-700';
@@ -199,16 +215,25 @@
                 description.className = 'text-gray-700 text-base font-medium';
                 description.textContent = site.description;
 
-                button.appendChild(title);
-                button.appendChild(description);
+                mainArea.appendChild(title);
+                mainArea.appendChild(description);
+                
+                // New Tab Button Container
+                const newTabContainer = document.createElement('div');
+                newTabContainer.className = 'w-full p-3 border-t border-gray-200 bg-gray-50 rounded-b-xl';
 
-                button.onclick = () => {
-                    // Open the modal
-                    urlIframe.src = site.url;
-                    modalTitle.textContent = site.title + ' Preview';
-                    urlModal.style.display = 'flex';
-                };
-                gridContainer.appendChild(button);
+                const newTabButton = document.createElement('a');
+                newTabButton.className = 'w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-150';
+                newTabButton.href = site.url;
+                newTabButton.target = '_blank'; // Opens in a new tab
+                newTabButton.textContent = 'Open in New Tab (Full Screen)';
+                
+                newTabContainer.appendChild(newTabButton);
+
+                card.appendChild(mainArea);
+                card.appendChild(newTabContainer);
+
+                gridContainer.appendChild(card);
             });
 
             categorySection.appendChild(gridContainer);
@@ -219,13 +244,13 @@
     // Modal control logic
     closeBtn.onclick = function() {
         urlModal.style.display = 'none';
-        urlIframe.src = '';
+        urlIframe.src = ''; // Clear the iframe
     }
 
     window.onclick = function(event) {
         if (event.target == urlModal) {
             urlModal.style.display = 'none';
-            urlIframe.src = '';
+            urlIframe.src = ''; // Clear the iframe
         }
     }
 
