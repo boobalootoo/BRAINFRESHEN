@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Local Playlist Player</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind to use the Inter font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light background */
+            min-height: 100vh;
+        }
+        /* Custom styles for the video container to maintain a 16:9 aspect ratio */
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+            height: 0;
+            overflow: hidden;
+            border-radius: 0.5rem; /* rounded-lg */
+        }
+        .video-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        /* Style for editable title input */
+        .editable-title {
+            background-color: transparent;
+            border: none;
+            outline: none;
+            padding: 0;
+            margin: 0;
+            font-size: 1rem;
+            line-height: 1.5rem;
+            width: 100%;
+            transition: all 0.1s;
+        }
+        .editable-title:focus {
+            background-color: #e5e7eb; /* gray-200 */
+            border-radius: 0.25rem;
+            padding: 0 0.5rem;
+        }
+    </style>
+</head>
+<body class="flex items-start justify-center p-4 sm:p-8">
+
+    <!-- Main Application Card -->
+    <div class="w-full max-w-4xl bg-white p-6 sm:p-8 rounded-xl shadow-2xl mt-16 transition-all duration-300">
+        
+        <!-- Title and Info Button Group -->
+        <div class="flex items-center justify-between mb-2">
+            <h1 class="text-3xl font-extrabold text-gray-900">Advanced Local Playlist Player</h1>
+            <!-- Info Button -->
+            <button id="infoButton" class="text-gray-500 hover:text-blue-600 transition duration-150 p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="How to use this site">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </button>
+        </div>
+        
+        <p class="text-gray-600 mb-6">Playlist is saved locally in your browser and features editable titles, autoplay control, and CSV import/export.</p>
+        
+        <!-- Storage Status -->
+        <div class="mb-4 text-xs text-blue-600 font-semibold" id="storageStatus">
+            Storage: Using Local Browser Storage. Playlist is unique to this browser.
+        </div>
+
+        <!-- Add New Video Form -->
+        <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h2 class="text-xl font-bold mb-3 text-gray-800">Add New Video</h2>
+            <div class="grid grid-cols-1 md:grid-cols-7 gap-3 items-center">
+                <input 
+                    type="text" 
+                    id="videoTitle" 
+                    placeholder="Optional Title (Editable later)"
+                    class="md:col-span-2 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-gray-800"
+                >
+                <input 
+                    type="url" 
+                    id="videoUrl" 
+                    placeholder="YouTube URL (e.g., https://youtu.be/...)"
+                    class="md:col-span-4 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-gray-800"
+                >
+                <button 
+                    id="addItemButton"
+                    class="md:col-span-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 rounded-lg shadow-md transition duration-150 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-green-300"
+                >
+                    Add
+                </button>
+            </div>
+        </div>
+
+        <!-- Playlist Display (Table-like structure) -->
+        <div class="mb-6">
+            <h2 class="text-xl font-bold mb-3 text-gray-800">Current Playlist (<span id="playlistCount">0</span> videos)</h2>
+            <div id="playlistContainer" class="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100 min-h-[50px] overflow-hidden">
+                <!-- Playlist items will be dynamically inserted here -->
+                <div class="p-4 text-gray-500 text-center" id="emptyMessage">Add some videos to start your playlist!</div>
+            </div>
+        </div>
+        
+        <!-- Playback and CSV Controls -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+            
+            <!-- Autoplay Toggle -->
+            <div class="flex items-center space-x-2">
+                <input type="checkbox" id="autoplayToggle" checked class="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <label for="autoplayToggle" class="text-gray-700 font-medium select-none">Autoplay Videos</label>
+            </div>
+
+            <!-- CSV Buttons -->
+            <div class="flex space-x-3">
+                <button 
+                    id="exportCsvBtn"
+                    class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 text-sm"
+                >
+                    Export CSV
+                </button>
+                <button 
+                    id="importCsvBtn"
+                    class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 text-sm"
+                >
+                    Import CSV
+                </button>
+                <input type="file" id="importCsvInput" accept=".csv" class="hidden">
+            </div>
+
+            <!-- Start Playing Button -->
+            <button 
+                id="openModalButton"
+                class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition duration-150 transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled
+            >
+                Start Playlist
+            </button>
+        </div>
+
+        <!-- Message Box for Errors -->
+        <div id="messageBox" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden transition-opacity duration-300">
+            <!-- Error message will be inserted here -->
+        </div>
+    </div>
+
+    <!-- Instruction Modal Window (Hidden by default) -->
+    <div id="instructionModal" class="hidden fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4 transition-opacity duration-300" onclick="closeInstructionModal(event)">
+        <!-- Modal Content -->
+        <div class="relative w-full max-w-lg bg-white p-6 rounded-xl shadow-2xl" onclick="event.stopPropagation()">
+            <h3 class="text-2xl font-bold text-gray-900 mb-4">How to Use This Playlist Player</h3>
+
+            <!-- Close Button -->
+            <button 
+                class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition"
+                aria-label="Close instructions"
+                onclick="closeInstructionModal()"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            
+            <div class="space-y-4 text-gray-700">
+                <p>This is an **Advanced Local Playlist Player**. Your playlist is saved securely in your web browser's local storage (which means it's only available on this device and browser).</p>
+                
+                <h4 class="font-semibold text-gray-800">1. Adding Videos</h4>
+                <ul class="list-disc list-inside ml-4 text-sm space-y-1">
+                    <li>Paste a **YouTube URL** into the URL field.</li>
+                    <li>If the Title field is empty, it will default to the video ID (which is **editable**).</li>
+                    <li>Click the **Add** button.</li>
+                </ul>
+
+                <h4 class="font-semibold text-gray-800">2. Managing the Playlist</h4>
+                <ul class="list-disc list-inside ml-4 text-sm space-y-1">
+                    <li>Click on any video row in the playlist to **start playing** the playlist from that video.</li>
+                    <li>Click on a video's title to **edit it directly**. Press Enter or click away to save.</li>
+                    <li>Use the **Export CSV** button to download your playlist for backup or sharing.</li>
+                    <li>Use the **Import CSV** button to load a playlist from a CSV file (must be `Title,VideoID` format).</li>
+                </ul>
+
+                <h4 class="font-semibold text-gray-800">3. Playback</h4>
+                <ul class="list-disc list-inside ml-4 text-sm space-y-1">
+                    <li>Use the **Autoplay toggle** to control whether videos start automatically when the modal opens.</li>
+                    <li>Use the **Previous** and **Next** buttons (or **Left/Right Arrow Keys**) to navigate the playlist.</li>
+                </ul>
+            </div>
+            <button 
+                onclick="closeInstructionModal()" 
+                class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition duration-150"
+            >
+                Got It
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Video Modal Window (Hidden by default) -->
+    <div id="videoModal" class="hidden fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4 transition-opacity duration-300" onclick="closeModal(event)">
+        
+        <!-- Modal Content (to prevent closing when clicking inside video area) -->
+        <div class="relative w-full max-w-4xl p-0" onclick="event.stopPropagation()">
+            
+            <!-- Video Title -->
+            <h3 id="modalVideoTitle" class="text-white text-lg font-bold truncate mb-2 px-2 sm:px-0"></h3>
+
+            <!-- Close Button -->
+            <button 
+                id="closeButton"
+                class="absolute -top-10 right-0 bg-white text-gray-900 h-8 w-8 flex items-center justify-center rounded-full shadow-lg hover:bg-gray-200 transition duration-150 focus:outline-none focus:ring-4 focus:ring-white/50"
+                aria-label="Close video player"
+                onclick="closeModal()"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+            </button>
+            
+            <!-- Playlist Navigation and Counter -->
+            <div class="flex items-center justify-between p-2 sm:p-4 text-white">
+                <button 
+                    id="prevBtn" 
+                    class="p-2 sm:p-3 bg-gray-700 hover:bg-blue-600 rounded-lg transition duration-150 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-sm sm:text-base"
+                >
+                    &larr; Previous
+                </button>
+                <span id="videoCounter" class="text-sm sm:text-base font-semibold text-white/90">
+                    <!-- Video X of Y -->
+                </span>
+                <button 
+                    id="nextBtn" 
+                    class="p-2 sm:p-3 bg-gray-700 hover:bg-blue-600 rounded-lg transition duration-150 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-sm sm:text-base"
+                >
+                    Next &rarr;
+                </button>
+            </div>
+
+            <!-- Iframe Container -->
+            <div id="videoEmbedContainer" class="video-container shadow-2xl">
+                <!-- YouTube iframe will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const playlistState = {
+            data: [],
+            storageKey: 'youtubePlaylistData'
+        };
+        
+        let currentVideoIndex = -1;
+
+        // --- DOM Element References (Initialized on DOMContentLoaded) ---
+        let videoTitleInput, videoUrlInput, addItemButton, openModalBtn, playlistContainer, playlistCountSpan, 
+            videoModal, videoEmbedContainer, messageBox, prevBtn, nextBtn, videoCounter, modalVideoTitle, 
+            emptyMessage, autoplayToggle, exportCsvBtn, importCsvBtn, importCsvInput,
+            infoButton, instructionModal; // Added new element references
+
+        /**
+         * Shows a transient error or status message.
+         * @param {string} message The text to display.
+         */
+        function showMessage(message) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-red-100', 'border-red-400', 'text-red-700');
+            messageBox.classList.add('bg-yellow-100', 'border-yellow-400', 'text-yellow-700'); 
+            
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 5000);
+        }
+
+        /**
+         * Extracts the video ID from various YouTube URL formats.
+         * @param {string} url The full YouTube URL string.
+         * @returns {string | null} The video ID or null if not found.
+         */
+        function extractVideoId(url) {
+            const pattern = /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([^&\n?#]+)/i;
+            const match = url.match(pattern);
+            
+            if (match && match[1] && match[1].length === 11) {
+                return match[1];
+            }
+            return null;
+        }
+
+        // --- Local Storage Functions ---
+
+        /**
+         * Saves the current playlist data to localStorage.
+         */
+        function savePlaylistToLocal() {
+            try {
+                localStorage.setItem(playlistState.storageKey, JSON.stringify(playlistState.data));
+                console.log("Playlist successfully saved to Local Storage.");
+            } catch (error) {
+                console.error("Error writing playlist to Local Storage:", error);
+                showMessage("Error: Could not save playlist locally. Check console for details.");
+            }
+        }
+
+        /**
+         * Loads the playlist data from localStorage.
+         */
+        function loadPlaylistFromLocal() {
+            try {
+                const storedData = localStorage.getItem(playlistState.storageKey);
+                if (storedData) {
+                    playlistState.data = JSON.parse(storedData);
+                }
+            } catch (error) {
+                console.error("Error reading playlist from Local Storage:", error);
+                playlistState.data = []; // Fallback to empty list on corruption
+            }
+            updatePlaylistUI();
+        }
+
+        // --- Playlist Management Functions ---
+
+        /**
+         * Adds a new video item to the playlist.
+         */
+        function addItem() {
+            const url = videoUrlInput.value.trim();
+            const videoId = extractVideoId(url);
+
+            if (!videoId) {
+                showMessage('Please enter a valid YouTube URL.');
+                return;
+            }
+            
+            // Use user-provided title or video ID as a default
+            const title = videoTitleInput.value.trim() || `Video ID: ${videoId}`;
+
+            const newItem = {
+                title: title,
+                id: videoId
+            };
+
+            playlistState.data.push(newItem);
+            savePlaylistToLocal();
+            updatePlaylistUI();
+
+            // Clear inputs after successful addition
+            videoTitleInput.value = '';
+            videoUrlInput.value = '';
+        }
+        
+        /**
+         * Removes a video item from the playlist by its index.
+         * @param {number} index The index of the item to remove.
+         */
+        function removeItem(index) {
+            if (index >= 0 && index < playlistState.data.length) {
+                playlistState.data.splice(index, 1);
+                savePlaylistToLocal();
+                updatePlaylistUI();
+            }
+        }
+
+        /**
+         * Handles saving the title when the input loses focus (onblur) or Enter key is pressed.
+         * @param {number} index The index of the video item.
+         * @param {HTMLInputElement} inputElement The input field being edited.
+         */
+        function handleTitleEdit(index, inputElement) {
+            const newTitle = inputElement.value.trim();
+            if (index >= 0 && index < playlistState.data.length && newTitle) {
+                playlistState.data[index].title = newTitle;
+                savePlaylistToLocal();
+                updatePlaylistUI(); // Refresh UI to ensure everything is synced
+            }
+        }
+
+        /**
+         * Updates the HTML list based on the current playlistState.data array.
+         */
+        function updatePlaylistUI() {
+            const playlist = playlistState.data;
+            playlistContainer.innerHTML = '';
+            playlistCountSpan.textContent = playlist.length;
+            openModalBtn.disabled = playlist.length === 0;
+            emptyMessage.classList.add('hidden');
+            
+            if (playlist.length === 0) {
+                emptyMessage.classList.remove('hidden');
+                playlistContainer.appendChild(emptyMessage);
+                return;
+            }
+
+            playlist.forEach((item, index) => {
+                const itemDiv = document.createElement('div');
+                // Added cursor-pointer and hover:bg-blue-50 for click-to-play visual feedback
+                itemDiv.classList.add('p-3', 'flex', 'items-center', 'justify-between', 'cursor-pointer', 'hover:bg-blue-50', 'transition', 'duration-100');
+                
+                // --- Click-to-Play Event ---
+                itemDiv.onclick = (e) => {
+                    // Prevent propagation if the click target is the remove button or the title input
+                    if (e.target.closest('button, input')) {
+                        return;
+                    }
+                    openModal(index);
+                };
+
+                // Title and Index Container
+                const infoDiv = document.createElement('div');
+                infoDiv.classList.add('flex', 'items-center', 'min-w-0', 'flex-grow');
+                
+                const indexSpan = document.createElement('span');
+                indexSpan.classList.add('text-sm', 'font-mono', 'text-gray-400', 'mr-3', 'select-none');
+                indexSpan.textContent = `${index + 1}.`;
+
+                // --- Editable Title Input ---
+                const titleInput = document.createElement('input');
+                titleInput.type = 'text';
+                titleInput.value = item.title;
+                titleInput.title = "Click to edit title"; // Tooltip
+                titleInput.classList.add('editable-title', 'text-gray-800', 'font-medium', 'truncate', 'flex-grow');
+                
+                // Save on blur
+                titleInput.onblur = () => handleTitleEdit(index, titleInput);
+
+                // Save on Enter key press
+                titleInput.onkeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        titleInput.blur(); 
+                    }
+                };
+
+                infoDiv.appendChild(indexSpan);
+                infoDiv.appendChild(titleInput);
+
+                // Remove Button
+                const removeBtn = document.createElement('button');
+                removeBtn.classList.add('text-red-500', 'hover:text-red-700', 'ml-4', 'p-1', 'rounded-full', 'transition', 'flex-shrink-0');
+                removeBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 6h6v8H7V6z" clip-rule="evenodd" />
+                    </svg>
+                `;
+                // Use a separate handler to prevent click from triggering openModal
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation(); // Stop click from propagating to itemDiv
+                    removeItem(index);
+                };
+                
+                itemDiv.appendChild(infoDiv);
+                itemDiv.appendChild(removeBtn);
+                playlistContainer.appendChild(itemDiv);
+            });
+        }
+        
+        // --- Modal and Playback Functions ---
+
+        /**
+         * Loads and displays the video at the given index from the playlist.
+         * @param {number} index The index of the video to load.
+         */
+        function loadVideo(index) {
+            const playlist = playlistState.data;
+            if (index < 0 || index >= playlist.length) return;
+
+            const videoItem = playlist[index];
+            currentVideoIndex = index;
+            
+            // Check autoplay status
+            const isAutoplayEnabled = autoplayToggle.checked;
+
+            // Update modal elements
+            modalVideoTitle.textContent = videoItem.title;
+            videoCounter.textContent = `Video ${currentVideoIndex + 1} of ${playlist.length}`;
+
+            // Update navigation buttons state
+            prevBtn.disabled = currentVideoIndex === 0;
+            nextBtn.disabled = currentVideoIndex === playlist.length - 1;
+
+            // Construct the embed URL. `autoplay=1` only if toggle is checked.
+            const autoplayParam = isAutoplayEnabled ? '&autoplay=1' : '';
+            const embedUrl = `https://www.youtube.com/embed/${videoItem.id}?rel=0${autoplayParam}`;
+
+            // Create the iframe element
+            const iframe = document.createElement('iframe');
+            iframe.setAttribute('src', embedUrl);
+            iframe.setAttribute('frameborder', '0');
+            iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+            iframe.setAttribute('allowfullscreen', '');
+            iframe.setAttribute('title', videoItem.title);
+
+            // Clear any existing content and append the new iframe
+            videoEmbedContainer.innerHTML = '';
+            videoEmbedContainer.appendChild(iframe);
+        }
+
+
+        /**
+         * Opens the video modal and loads the first video.
+         * @param {number} startIndex The index of the video to start playing. Defaults to 0.
+         */
+        function openModal(startIndex = 0) {
+            const playlist = playlistState.data;
+            if (playlist.length === 0) {
+                showMessage('The playlist is empty. Please add videos first.');
+                return;
+            }
+
+            // Show the modal
+            videoModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+
+            // Load the specified video
+            loadVideo(startIndex);
+        }
+
+        /**
+         * Closes the video modal and stops the video.
+         * @param {Event} event The event object (optional).
+         */
+        window.closeModal = function(event) {
+            // If an event is provided, only close if the click was on the overlay itself, not the content area.
+            if (event && event.target !== videoModal) {
+                return;
+            }
+            
+            currentVideoIndex = -1;
+            
+            videoModal.classList.add('hidden');
+            document.body.style.overflow = ''; // Restore scrolling
+
+            // Crucially, remove the iframe content to stop playback
+            videoEmbedContainer.innerHTML = '';
+            modalVideoTitle.textContent = '';
+            videoCounter.textContent = '';
+        }
+
+        // --- Instruction Modal Functions ---
+
+        /**
+         * Opens the instruction modal.
+         */
+        function openInstructionModal() {
+            instructionModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; 
+        }
+
+        /**
+         * Closes the instruction modal.
+         * @param {Event} event The event object (optional).
+         */
+        window.closeInstructionModal = function(event) {
+            // Only close if the click was on the overlay itself
+            if (event && event.target !== instructionModal) {
+                return;
+            }
+            instructionModal.classList.add('hidden');
+            document.body.style.overflow = ''; 
+        }
+
+        // --- CSV I/O Functions (Unchanged) ---
+
+        /**
+         * Converts the current playlist to CSV format and triggers a download.
+         */
+        function exportCSV() {
+            const playlist = playlistState.data;
+            if (playlist.length === 0) {
+                showMessage("Playlist is empty, nothing to export.");
+                return;
+            }
+
+            // Header row: Title,VideoID
+            let csvContent = "Title,VideoID\n";
+
+            // Data rows
+            playlist.forEach(item => {
+                // Escape quotes within title and enclose title in quotes
+                const safeTitle = `"${item.title.replace(/"/g, '""')}"`; 
+                csvContent += `${safeTitle},${item.id}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "youtube_playlist.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        /**
+         * Reads and parses an uploaded CSV file, replacing the current playlist.
+         * @param {Event} event The change event from the file input.
+         */
+        function importCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    const lines = content.split('\n').filter(line => line.trim() !== '');
+
+                    if (lines.length < 2 || !lines[0].toLowerCase().includes("title")) {
+                        showMessage("CSV file must contain a 'Title,VideoID' header and at least one video entry.");
+                        return;
+                    }
+
+                    const newPlaylist = [];
+                    // Start parsing from line 1 (skipping header at line 0)
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i];
+                        // Simple regex for CSV parsing (handles quoted titles)
+                        const parts = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || []; 
+
+                        if (parts.length >= 2) {
+                            let title = parts[0].trim().replace(/^"|"$/g, '').replace(/""/g, '"');
+                            let id = parts[1].trim();
+
+                            // Basic validation for YouTube ID (11 characters)
+                            if (id.length === 11) {
+                                newPlaylist.push({ title, id });
+                            }
+                        }
+                    }
+                    
+                    if (newPlaylist.length > 0) {
+                        playlistState.data = newPlaylist;
+                        savePlaylistToLocal();
+                        updatePlaylistUI();
+                        showMessage(`Successfully imported ${newPlaylist.length} videos from CSV.`);
+                    } else {
+                        showMessage("No valid videos found in the CSV file.");
+                    }
+
+                } catch (error) {
+                    console.error("Error processing CSV:", error);
+                    showMessage("Error processing CSV file. Please ensure it is correctly formatted (Title,VideoID).");
+                } finally {
+                    importCsvInput.value = ''; // Reset file input
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- Event Handlers ---
+
+        function nextVideo() {
+            loadVideo(currentVideoIndex + 1);
+        }
+
+        function prevVideo() {
+            loadVideo(currentVideoIndex - 1);
+        }
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize DOM element references
+            videoTitleInput = document.getElementById('videoTitle');
+            videoUrlInput = document.getElementById('videoUrl');
+            addItemButton = document.getElementById('addItemButton');
+            openModalBtn = document.getElementById('openModalButton');
+            playlistContainer = document.getElementById('playlistContainer');
+            playlistCountSpan = document.getElementById('playlistCount');
+            videoModal = document.getElementById('videoModal');
+            videoEmbedContainer = document.getElementById('videoEmbedContainer');
+            messageBox = document.getElementById('messageBox');
+            prevBtn = document.getElementById('prevBtn');
+            nextBtn = document.getElementById('nextBtn');
+            videoCounter = document.getElementById('videoCounter');
+            modalVideoTitle = document.getElementById('modalVideoTitle');
+            emptyMessage = document.getElementById('emptyMessage');
+            autoplayToggle = document.getElementById('autoplayToggle');
+            exportCsvBtn = document.getElementById('exportCsvBtn');
+            importCsvBtn = document.getElementById('importCsvBtn');
+            importCsvInput = document.getElementById('importCsvInput');
+            
+            // New Info Modal references
+            infoButton = document.getElementById('infoButton');
+            instructionModal = document.getElementById('instructionModal');
+
+            // --- Event Listeners ---
+            addItemButton.addEventListener('click', addItem);
+            openModalBtn.addEventListener('click', () => openModal(0)); // Start from the first video
+            nextBtn.addEventListener('click', nextVideo);
+            prevBtn.addEventListener('click', prevVideo);
+            
+            // Info Button Listener
+            infoButton.addEventListener('click', openInstructionModal);
+
+            // CSV Listeners
+            exportCsvBtn.addEventListener('click', exportCSV);
+            importCsvBtn.addEventListener('click', () => importCsvInput.click()); // Trigger hidden file input
+            importCsvInput.addEventListener('change', importCSV);
+
+            // Keyboard Shortcuts for Modals
+            document.addEventListener('keydown', (event) => {
+                // Escape key for Video Modal
+                if (event.key === 'Escape') {
+                    if (!videoModal.classList.contains('hidden')) {
+                        closeModal();
+                    } else if (!instructionModal.classList.contains('hidden')) {
+                        // Escape key for Instruction Modal
+                        closeInstructionModal();
+                    }
+                }
+
+                // Arrow key navigation when video modal is open
+                if (!videoModal.classList.contains('hidden')) {
+                    if (event.key === 'ArrowRight' && !nextBtn.disabled) {
+                        nextVideo();
+                    } else if (event.key === 'ArrowLeft' && !prevBtn.disabled) {
+                        prevVideo();
+                    }
+                }
+            });
+
+            // Load saved data when the application starts
+            loadPlaylistFromLocal();
+        });
+    </script>
+</body>
+</html>
