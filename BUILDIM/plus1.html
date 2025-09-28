@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiled Plus-Plus Pattern</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .shape-container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        svg {
+            max-width: 600px;
+            width: 100%;
+            height: auto;
+        }
+        .piece-style {
+            fill: none;
+            stroke: #374151;
+            stroke-width: 0.1;
+            stroke-linejoin: round;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="shape-container text-center">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">
+            Tiled Plus-Plus Outline Pattern (7x7 Grid) - Hardcoded
+        </h1>
+
+        <svg id="plus-plus-svg" viewBox="0 0 23 21" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <path 
+                    id="plus-plus-piece"
+                    d="M 0 1 L 1 1 L 1 0 L 2 0 L 2 1 L 3 1 L 3 0 L 4 0 L 4 1 L 5 1 L 5 2 L 4 2 L 4 3 L 3 3 L 3 2 L 2 2 L 2 3 L 1 3 L 1 2 L 0 2 Z" 
+                    class="piece-style"
+                />
+            </defs>
+            <g id="tiled-pattern">
+                <!-- X Positions: 0, 3, 6, 9, 12, 15, 18 -->
+                
+                <!-- R=0 (Y=0) -->
+                <use href="#plus-plus-piece" x="0" y="0" />
+                <use href="#plus-plus-piece" x="3" y="0" transform="rotate(90 5.5 1.5)" />
+                <use href="#plus-plus-piece" x="6" y="0" />
+                <use href="#plus-plus-piece" x="9" y="0" transform="rotate(90 11.5 1.5)" />
+                <use href="#plus-plus-piece" x="12" y="0" />
+                <use href="#plus-plus-piece" x="15" y="0" transform="rotate(90 17.5 1.5)" />
+                <use href="#plus-plus-piece" x="18" y="0" />
+                
+                <!-- R=1 (Y=3) -->
+                <use href="#plus-plus-piece" x="0" y="3" transform="rotate(90 2.5 4.5)" />
+                <use href="#plus-plus-piece" x="3" y="3" />
+                <use href="#plus-plus-piece" x="6" y="3" transform="rotate(90 8.5 4.5)" />
+                <use href="#plus-plus-piece" x="9" y="3" />
+                <use href="#plus-plus-piece" x="12" y="3" transform="rotate(90 14.5 4.5)" />
+                <use href="#plus-plus-piece" x="15" y="3" />
+                <use href="#plus-plus-piece" x="18" y="3" transform="rotate(90 20.5 4.5)" />
+
+                <!-- R=2 (Y=6) -->
+                <use href="#plus-plus-piece" x="0" y="6" />
+                <use href="#plus-plus-piece" x="3" y="6" transform="rotate(90 5.5 7.5)" />
+                <use href="#plus-plus-piece" x="6" y="6" />
+                <use href="#plus-plus-piece" x="9" y="6" transform="rotate(90 11.5 7.5)" />
+                <use href="#plus-plus-piece" x="12" y="6" />
+                <use href="#plus-plus-piece" x="15" y="6" transform="rotate(90 17.5 7.5)" />
+                <use href="#plus-plus-piece" x="18" y="6" />
+
+                <!-- R=3 (Y=9) -->
+                <use href="#plus-plus-piece" x="0" y="9" transform="rotate(90 2.5 10.5)" />
+                <use href="#plus-plus-piece" x="3" y="9" />
+                <use href="#plus-plus-piece" x="6" y="9" transform="rotate(90 8.5 10.5)" />
+                <use href="#plus-plus-piece" x="9" y="9" />
+                <use href="#plus-plus-piece" x="12" y="9" transform="rotate(90 14.5 10.5)" />
+                <use href="#plus-plus-piece" x="15" y="9" />
+                <use href="#plus-plus-piece" x="18" y="9" transform="rotate(90 20.5 10.5)" />
+                
+                <!-- R=4 (Y=12) -->
+                <use href="#plus-plus-piece" x="0" y="12" />
+                <use href="#plus-plus-piece" x="3" y="12" transform="rotate(90 5.5 13.5)" />
+                <use href="#plus-plus-piece" x="6" y="12" />
+                <use href="#plus-plus-piece" x="9" y="12" transform="rotate(90 11.5 13.5)" />
+                <use href="#plus-plus-piece" x="12" y="12" />
+                <use href="#plus-plus-piece" x="15" y="12" transform="rotate(90 17.5 13.5)" />
+                <use href="#plus-plus-piece" x="18" y="12" />
+
+                <!-- R=5 (Y=15) -->
+                <use href="#plus-plus-piece" x="0" y="15" transform="rotate(90 2.5 16.5)" />
+                <use href="#plus-plus-piece" x="3" y="15" />
+                <use href="#plus-plus-piece" x="6" y="15" transform="rotate(90 8.5 16.5)" />
+                <use href="#plus-plus-piece" x="9" y="15" />
+                <use href="#plus-plus-piece" x="12" y="15" transform="rotate(90 14.5 16.5)" />
+                <use href="#plus-plus-piece" x="15" y="15" />
+                <use href="#plus-plus-piece" x="18" y="15" transform="rotate(90 20.5 16.5)" />
+
+                <!-- R=6 (Y=18) -->
+                <use href="#plus-plus-piece" x="0" y="18" />
+                <use href="#plus-plus-piece" x="3" y="18" transform="rotate(90 5.5 19.5)" />
+                <use href="#plus-plus-piece" x="6" y="18" />
+                <use href="#plus-plus-piece" x="9" y="18" transform="rotate(90 11.5 19.5)" />
+                <use href="#plus-plus-piece" x="12" y="18" />
+                <use href="#plus-plus-piece" x="15" y="18" transform="rotate(90 17.5 19.5)" />
+                <use href="#plus-plus-piece" x="18" y="18" />
+            </g>
+        </svg>
+
+        <p class="text-sm text-gray-500 mt-4">
+            All 49 pieces are manually placed with a horizontal step of 3 units (2-unit overlap).
+        </p>
+    </div>
+
+    <!-- The <script> section is now empty because all pieces are hardcoded in the HTML -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // No JavaScript is needed for rendering the pattern as it is hardcoded in SVG.
+        });
+    </script>
+
+</body>
+</html>
