@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Station Train — Enhanced View</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root { --train-translate-x: 0px; }
+        body { background: #f3f4f6; }
+        /* --- Train & Track --- */
+        #train-container { position: absolute; top: 0; left: 0%; transform: translateX(var(--train-translate-x)); transition: transform 1s linear; will-change: transform; z-index: 10; }
+        #train-emoji { font-size: 4rem; transform: scaleX(-1); display: inline-block; }
+        #track-container { position: relative; height: 10rem; width: 100%; }
+        #track-bed { position: absolute; width: 100%; height: 3rem; bottom: 3.5rem; overflow: hidden; background-image: url('https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/RUNAWAYBRAIN/tracks.png'); background-repeat: no-repeat; background-size: 100% 100%; border-radius: 2px; z-index: 1; }
+        .station-marker { position: absolute; bottom: 6.5rem; transform: translateX(-50%); width: 200px; height: 150px; z-index: 5; pointer-events: none; object-fit: contain; }
+        /* Small floating settings button (always available) */
+        #settings-toggle { position: fixed; top: 12px; right: 12px; z-index: 50; }
+        /* Full settings panel */
+        #settings-panel { position: fixed; inset: 0; display: none; z-index: 60; }
+        #settings-panel .backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.55); }
+        #settings-panel .panel { position: absolute; right: 12px; top: 12px; bottom: 12px; width: min(760px, 96%); background: white; border-radius: 12px; padding: 18px; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        /* Compact status (hidden from main view) kept inside settings */
+        .control-button { @apply px-3 py-1.5 text-xs rounded-lg font-bold transition-all duration-200 shadow-md; @apply focus:outline-none focus:ring-2 focus:ring-offset-2; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 font-sans">
+
+    <!-- Alert/Message Container -->
+    <div id="message-display" class="fixed top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-red-600 text-white rounded-lg shadow-xl hidden transition-opacity duration-300 opacity-0 z-[100]"></div>
+
+    <!-- TRACK + TRAIN (visible at all times) -->
+    <div class="flex justify-center w-full mb-12">
+        <div id="track-container" class="mx-auto px-4 md:px-8">
+            <div id="train-container" class="cursor-pointer" title="I am the Minute Express!">
+                <span id="train-emoji" role="img" aria-label="Train Emoji">🚂</span>
+            </div>
+            <div id="track-bed"></div>
+            <div id="station-markers-container"></div>
+        </div>
+    </div>
+
+    <!-- SETTINGS TOGGLE (small, always visible) -->
+    <div id="settings-toggle">
+        <button id="open-settings" class="bg-gray-800 text-white p-3 rounded-full shadow-lg focus:outline-none" title="Open Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-.21-.82-.31-1.24-.31s-.87.1-1.24.31l-1.35.78C6.18 4.6 5 6.01 5 7.63v.74c0 .87.35 1.7.99 2.3l1.83 1.83a2.5 2.5 0 001.76.73h1.44a2.5 2.5 0 001.77-.73l1.83-1.83c.64-.6.99-1.43.99-2.3v-.74c0-1.62-1.18-3.03-3.04-3.58l-1.35-.78zM10 17.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" clip-rule="evenodd" /></svg>
+        </button>
+    </div>
+
+    <!-- FULL SETTINGS PANEL (contains every control & setting; hidden by default) -->
+    <div id="settings-panel">
+        <div class="backdrop" id="settings-backdrop"></div>
+        <div class="panel" role="dialog" aria-modal="true" aria-label="Journey Settings Panel">
+
+            <!-- Close row -->
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-xl font-bold text-indigo-600">Journey Settings</h2>
+                <div class="flex items-center space-x-2">
+                    <button id="close-settings" class="control-button bg-gray-200">Close</button>
+                </div>
+            </div>
+
+            <!-- Define Stations Button -->
+            <div class="space-y-2 border-b pb-3 mb-3">
+                <button id="add-station-button" class="control-button bg-indigo-500 hover:bg-indigo-600 text-white focus:ring-indigo-300 w-full justify-center flex">
+                    <span class="mr-2">📝</span> Define Tasks/Stations
+                </button>
+            </div>
+
+            <!-- Mode Selector -->
+            <div class="space-y-2 mb-3">
+                <label class="block font-bold text-gray-700">Journey Mode</label>
+                <div class="flex space-x-2">
+                    <button id="mode-timer-button" class="flex-1 control-button bg-indigo-500 text-white flex items-center justify-center space-x-1"> 
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l3 3a1 1 0 001.414-1.414L11 9.586V6z" clip-rule="evenodd" /></svg>
+                        <span>Timer (Duration)</span>
+                    </button>
+                    <button id="mode-clock-button" class="flex-1 control-button bg-gray-300 text-gray-800 hover:bg-gray-400 flex items-center justify-center space-x-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm-1 9V6a1 1 0 112 0v5h2a1 1 0 110 2h-4a1 1 0 01-1-1z" /></svg>
+                        <span>Clock (Time of Day)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Announcements -->
+            <div class="border-t pt-3 space-y-2 mb-3">
+                <h3 class="font-bold text-gray-700">Audio Announcements</h3>
+                <div>
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" id="arrival-announcement-toggle" checked class="form-checkbox text-blue-600 h-4 w-4 rounded focus:ring-blue-500">
+                        <span class="ml-2 text-gray-700 font-medium">Arrival Announcement</span>
+                    </label>
+                    <p class="text-xs text-gray-500 ml-6">Plays 3 seconds before next task.</p>
+                </div>
+                <div>
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" id="progress-announcement-toggle" class="form-checkbox text-blue-600 h-4 w-4 rounded focus:ring-blue-500">
+                        <span class="ml-2 text-gray-700 font-medium">Progress Announcement</span>
+                    </label>
+                    <div class="ml-6 flex items-center mt-1">
+                        <label for="progress-interval" class="text-xs text-gray-600 mr-2">Frequency (seconds):</label>
+                        <input type="number" id="progress-interval" min="10" value="30" class="w-16 p-1 border rounded text-xs text-center" disabled>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Compact Controls (play/pause/mute & station preview) -->
+            <div class="mt-2 mb-3">
+                <div id="compact-status-display" class="text-base font-mono font-bold text-gray-800 text-center w-full py-1">Ready (00:00)</div>
+                <div class="flex space-x-8 pt-3 pb-2 w-full justify-center">
+                    <button id="start-reset-button" class="text-3xl p-3 rounded-full transition-all duration-200 shadow-xl focus:outline-none focus:ring-4 focus:ring-offset-2 bg-gray-200 hover:bg-gray-300 text-gray-800">
+                        <span id="control-icon" class="text-3xl leading-none">▶️</span>
+                    </button>
+                    <button id="mute-button" class="text-3xl p-3 rounded-full transition-all duration-200 shadow-xl focus:outline-none focus:ring-4 focus:ring-offset-2 bg-gray-200 hover:bg-gray-300">
+                        <span id="mute-icon" class="text-3xl leading-none">🔈</span>
+                    </button>
+                </div>
+                <div id="station-list-preview" class="mt-1 text-gray-600 text-xs text-center w-full pb-2">Stations: 0 (Total Duration: 0 min)</div>
+            </div>
+
+            <!-- Station Modal remains available (appears above everything) -->
+            <div id="station-modal" class="hidden fixed inset-0 flex items-center justify-center p-4 z-50">
+                <div class="modal-backdrop absolute inset-0"></div>
+                <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg z-10 border-t-4 border-indigo-500">
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800">Define Journey Stations</h2>
+                    
+                    <!-- CSV Import/Export Controls -->
+                    <div class="flex justify-between space-x-2 pb-4 border-b">
+                        <button id="export-csv-button" class="control-button bg-green-500 hover:bg-green-600 text-white flex-1 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                            Export to CSV
+                        </button>
+                        <input type="file" id="load-csv-input" accept=".csv" class="hidden">
+                        <button id="import-csv-button" class="control-button bg-yellow-500 hover:bg-yellow-600 text-white flex-1 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 8.293a1 1 0 011.414 0L10 10.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                            Import from CSV
+                        </button>
+                    </div>
+
+                    <div id="stations-input-container" class="space-y-3 max-h-80 overflow-y-auto pr-2 pt-4"></div>
+                    <div class="mt-4 flex justify-between items-center border-t pt-4">
+                        <button id="add-station-field" class="text-sm text-indigo-600 hover:text-indigo-800 font-semibold flex items-center"><span class="text-xl mr-1">+</span> Add Task/Station</button>
+                        <button id="save-stations-button" class="control-button bg-indigo-500 hover:bg-indigo-600 text-white px-5 py-2">Save Journey</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        // --- State & DOM references (kept same logic, selectors adjusted for moved elements) ---
+        let isAudioInitialized = false, isMuted = false, isClockMode = false;
+        let stations = [], totalDurationSeconds = 0, startTime = 0, elapsedTimeOnPause = 0, animationFrameId = null, isRunning = false, nextStationIndex = 0;
+        let arrivalAnnounceEnabled = true, progressAnnounceEnabled = false, progressIntervalSeconds = 30, lastProgressAnnounceTime = 0; 
+        const trackContainer = document.getElementById('track-container');
+        const trainContainer = document.getElementById('train-container');
+        const trainEmoji = document.getElementById('train-emoji');
+        const stationMarkersContainer = document.getElementById('station-markers-container');
+        const openSettingsBtn = document.getElementById('open-settings');
+        const settingsPanel = document.getElementById('settings-panel');
+        const settingsBackdrop = document.getElementById('settings-backdrop');
+        const closeSettingsBtn = document.getElementById('close-settings');
+        const messageDisplay = document.getElementById('message-display'); // New element
+        // Controls inside settings
+        const addStationButton = document.getElementById('add-station-button');
+        const stationModal = document.getElementById('station-modal');
+        const stationsInputContainer = document.getElementById('stations-input-container');
+        const addStationFieldButton = document.getElementById('add-station-field');
+        const saveStationsButton = document.getElementById('save-stations-button');
+        const stationListPreview = document.getElementById('station-list-preview');
+        const modeTimerButton = document.getElementById('mode-timer-button');
+        const modeClockButton = document.getElementById('mode-clock-button');
+        const arrivalToggle = document.getElementById('arrival-announcement-toggle');
+        const progressToggle = document.getElementById('progress-announcement-toggle');
+        const progressIntervalInput = document.getElementById('progress-interval');
+        const compactStatusDisplay = document.getElementById('compact-status-display');
+        const startResetButton = document.getElementById('start-reset-button');
+        const muteButton = document.getElementById('mute-button');
+        const muteIcon = document.getElementById('mute-icon');
+        const controlIcon = document.getElementById('control-icon');
+        // CSV Elements
+        const exportCsvButton = document.getElementById('export-csv-button');
+        const importCsvButton = document.getElementById('import-csv-button');
+        const loadCsvInput = document.getElementById('load-csv-input');
+
+        // Audio & assets URLs
+        const CHUG_URL = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/RUNAWAYBRAIN/chug.wav';
+        const CHOO_URL = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/RUNAWAYBRAIN/choo.mp3';
+        const STATION_IMAGE_URL = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/RUNAWAYBRAIN/station.png';
+        let chugAudio = null, chooAudio = null;
+        const LOCAL_STORAGE_KEY = 'trainStationsData'; // Key for local storage persistence
+
+        // --- Custom Message Display (Replaces alert()) ---
+        function displayMessage(text, isError = true) {
+            console.warn(`[Message] ${text}`);
+            messageDisplay.textContent = text;
+            messageDisplay.classList.remove('hidden', 'bg-green-500', 'bg-red-600', 'opacity-0');
+            messageDisplay.classList.add(isError ? 'bg-red-600' : 'bg-green-500', 'opacity-100');
+            setTimeout(() => {
+                messageDisplay.classList.remove('opacity-100');
+                messageDisplay.classList.add('opacity-0');
+                setTimeout(() => messageDisplay.classList.add('hidden'), 300);
+            }, 5000);
+        }
+
+        // --- Audio & Mode ---
+        function initializeAudio(){ if(isAudioInitialized) return; chugAudio = new Audio(CHUG_URL); chugAudio.loop=true; chugAudio.volume=0.5; chooAudio = new Audio(CHOO_URL); chooAudio.volume=1.0; chugAudio.load(); chooAudio.load(); isAudioInitialized=true; setMute(isMuted); }
+        function speak(text){ if(isMuted||!window.speechSynthesis) return; window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.volume=1; window.speechSynthesis.speak(u); }
+        function setMute(m){ isMuted=m; muteIcon.textContent = isMuted ? '🔇' : '🔈'; if(chugAudio) chugAudio.volume = isMuted ? 0 : 0.5; if(chooAudio) chooAudio.volume = isMuted ? 0 : 1.0; if(isMuted && window.speechSynthesis) window.speechSynthesis.cancel(); }
+        function setMode(isClock){ 
+            isClockMode = isClock; 
+            if(isClockMode){ 
+                modeClockButton.classList.remove('bg-gray-300','text-gray-800'); modeClockButton.classList.add('bg-indigo-500','text-white'); 
+                modeTimerButton.classList.remove('bg-indigo-500','text-white'); modeTimerButton.classList.add('bg-gray-300','text-gray-800'); 
+            } else { 
+                modeTimerButton.classList.remove('bg-gray-300','text-gray-800'); modeTimerButton.classList.add('bg-indigo-500','text-white'); 
+                modeClockButton.classList.remove('bg-indigo-500','text-white'); modeClockButton.classList.add('bg-gray-300','text-gray-800'); 
+            } 
+            resetTimer(); 
+            // Re-render modal if open to show correct inputs
+            if(!stationModal.classList.contains('hidden')) renderStationInputs(stations); 
+            saveStationsToLocal(); // Persist mode change
+        }
+
+        // --- Local Storage Persistence ---
+        function saveStationsToLocal() {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+                stations: stations,
+                isClockMode: isClockMode
+            }));
+        }
+
+        function loadStationsFromLocal() {
+            const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (savedData) {
+                try {
+                    const data = JSON.parse(savedData);
+                    if (Array.isArray(data.stations) && data.stations.length > 0) {
+                        stations = data.stations;
+                        stations.forEach(s => s.durationMinutes = parseInt(s.durationMinutes, 10));
+                        // Set mode before calculating duration, as duration calculation depends on mode
+                        setMode(!!data.isClockMode); 
+                        calculateTotalDuration();
+                        updateStatusDisplay(0);
+                        updateStationListPreview();
+                        return true;
+                    }
+                } catch (e) {
+                    console.error('Error parsing local storage data:', e);
+                }
+            }
+            return false;
+        }
+
+        // Movement calculations (same as original)
+        let maxTravelDistancePx = 0, trainWidthPx = 0; const TRAIN_HEIGHT_ESTIMATE_PX = 64, TRAIN_VERTICAL_ALIGNMENT_OFFSET_PX = 15;
+        function calculateMovementDimensions(){ const trackWidth = trackContainer.getBoundingClientRect().width; const trackBed = document.getElementById('track-bed'); const trainRect = trainEmoji.getBoundingClientRect(); if(trackBed){ const trackContainerRect = trackContainer.getBoundingClientRect(); const trackBedRect = trackBed.getBoundingClientRect(); const trackBedTopY = trackBedRect.top - trackContainerRect.top; const trainTopPosition = trackBedTopY - TRAIN_HEIGHT_ESTIMATE_PX + TRAIN_VERTICAL_ALIGNMENT_OFFSET_PX; trainContainer.style.top = `${trainTopPosition}px`; } trainWidthPx = trainRect.width * 0.8; maxTravelDistancePx = trackWidth - trainWidthPx - 10; }
+
+        // ---- Station & timing logic (kept mostly intact) ----
+        function calculateTotalDuration(){ if(isClockMode){ if(stations.length<2){ totalDurationSeconds=0; updateStationListPreview(); return; } const firstTimeMinutes = stations[0].durationMinutes; const lastTimeMinutes = stations[stations.length-1].durationMinutes; let spanMinutes = lastTimeMinutes - firstTimeMinutes; if(spanMinutes<=0) spanMinutes += 24*60; totalDurationSeconds = spanMinutes*60; } else { totalDurationSeconds = stations.reduce((s,st)=>s+(st.durationMinutes*60),0); } updateStationListPreview(); }
+        function updateStationListPreview(){ let previewText=''; if(isClockMode && stations.length>0){ const totalMinutes = Math.round(totalDurationSeconds/60); const startH = Math.floor(stations[0]?.durationMinutes/60).toString().padStart(2,'0'); const startM = (stations[0]?.durationMinutes%60).toString().padStart(2,'0'); const lastStation = stations[stations.length-1]; let endH = Math.floor(lastStation?.durationMinutes/60).toString().padStart(2,'0'); let endM = (lastStation?.durationMinutes%60).toString().padStart(2,'0'); previewText = `Stations: ${stations.length} (Journey: ${startH}:${startM} to ${endH}:${endM} / Span: ${totalMinutes} min)`; } else { const totalMinutes = stations.reduce((sum,s)=>sum+s.durationMinutes,0); previewText = `Stations: ${stations.length} (Total Duration: ${totalMinutes} min)`; } if(stations.length>0 && nextStationIndex<stations.length){ previewText += `\nCurrent Task: ${stations[nextStationIndex].name}`; } stationListPreview.innerText = previewText; generateStationMarkers(); }
+        function updateStatusDisplay(currentElapsedSeconds){ let statusText = 'Ready (00:00)'; let isFinished = currentElapsedSeconds >= totalDurationSeconds && totalDurationSeconds > 0; if(totalDurationSeconds>0){ const currentTaskName = stations[nextStationIndex]?.name || 'Final Destination'; if(isClockMode){ const now = new Date(); const currentH = now.getHours().toString().padStart(2,'0'); const currentM = now.getMinutes().toString().padStart(2,'0'); const currentS = now.getSeconds().toString().padStart(2,'0'); if(isRunning){ if(currentElapsedSeconds<0){ statusText = `Awaiting Start at ${Math.floor(stations[0].durationMinutes/60).toString().padStart(2,'0')}:${(stations[0].durationMinutes%60).toString().padStart(2,'0')}`; isFinished=false; } else { statusText = `Live Clock: ${currentH}:${currentM}:${currentS} (${currentTaskName})`; } } else if(currentElapsedSeconds<totalDurationSeconds && currentElapsedSeconds>=0){ statusText = `Paused Clock: ${currentH}:${currentM}:${currentS} (${currentTaskName})`; } else if(isFinished){ statusText = `Journey End (${currentTaskName}) - ${currentH}:${currentM}:${currentS}`; } else { statusText = `Ready (Clock Mode) - ${currentH}:${currentM}:${currentS}`; } } else { const remainingSeconds = Math.max(0, totalDurationSeconds - currentElapsedSeconds); const minutes = Math.floor(remainingSeconds/60).toString().padStart(2,'0'); const seconds = Math.floor(remainingSeconds%60).toString().padStart(2,'0'); if(isRunning){ statusText = `${currentTaskName}: ${minutes}:${seconds}`; } else if(currentElapsedSeconds<totalDurationSeconds){ statusText = `Paused (${currentTaskName}: ${minutes}:${seconds})`; } else { statusText = `Finished! (00:00)`; } } }
+            compactStatusDisplay.textContent = statusText;
+            let icon = '▶️', ringColor = 'ring-green-500'; if(isRunning){ icon = '⏸️'; ringColor = 'ring-yellow-500'; } else if(isFinished){ icon = '🔄'; ringColor = 'ring-blue-500'; }
+            controlIcon.textContent = icon;
+            startResetButton.className = `text-3xl p-3 rounded-full transition-all duration-200 shadow-xl focus:outline-none focus:ring-4 focus:ring-offset-2 text-gray-900 bg-gray-200 hover:bg-gray-300 ${ringColor}`;
+            startResetButton.disabled = totalDurationSeconds === 0 && !isFinished;
+        }
+
+        function announceUpcomingArrival(){ if(!arrivalAnnounceEnabled||nextStationIndex>=stations.length) return; if(arrivalAnnounced) return; const nextStation = stations[nextStationIndex+1]; const arrivalName = nextStation? nextStation.name : 'the final destination'; const arrivalText = `Attention: Approaching next stop, ${arrivalName}. Please prepare for arrival.`; speak(arrivalText); arrivalAnnounced = true; }
+        function announceProgress(elapsedSeconds){ if(!progressAnnounceEnabled||totalDurationSeconds===0) return; if(elapsedSeconds - lastProgressAnnounceTime < progressIntervalSeconds) return; const upcomingStations = stations.slice(nextStationIndex+1); if(upcomingStations.length>0){ const upcomingNames = upcomingStations.map(s=>s.name).join(', then '); const progressText = `Current task is ${stations[nextStationIndex].name}. Next stops are: ${upcomingNames}.`; speak(progressText); lastProgressAnnounceTime = elapsedSeconds; } else if(nextStationIndex<stations.length){ const currentTask = stations[nextStationIndex].name; const progressText = `Current task is ${currentTask}. Approaching final destination.`; speak(progressText); lastProgressAnnounceTime = elapsedSeconds; } }
+
+        let arrivalAnnounced = false;
+        function updateTrainPosition(timestamp){ if(!isRunning) return; let elapsedSeconds, percentage; if(isClockMode){ if(stations.length<2||totalDurationSeconds<=0){ stopTimer(true); return; } const now = new Date(); const nowMinutesSinceMidnight = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60; const startMinutesSinceMidnight = stations[0].durationMinutes; let currentMinutesRelative = nowMinutesSinceMidnight - startMinutesSinceMidnight; if(currentMinutesRelative < 0){ elapsedSeconds = currentMinutesRelative*60; percentage = 0; } else { elapsedSeconds = currentMinutesRelative*60; percentage = (elapsedSeconds/totalDurationSeconds)*100; } if(percentage>=100){ percentage=100; stopTimer(true); } } else { const timeElapsedSinceStart = (Date.now()-startTime)/1000; elapsedSeconds = timeElapsedSinceStart + elapsedTimeOnPause; percentage = (elapsedSeconds/totalDurationSeconds)*100; if(percentage>=100){ percentage=100; stopTimer(true); } }
+            const currentTravelPx = (percentage/100)*maxTravelDistancePx; trainContainer.style.setProperty('--train-translate-x', `${Math.min(currentTravelPx,maxTravelDistancePx)}px`);
+            updateStatusDisplay(elapsedSeconds);
+            let cumulativeTime = 0; let currentStationFound = false;
+            for(let i=0;i<stations.length;i++){ let stationDurationSeconds; if(isClockMode){ if(i===stations.length-1) break; const currentStationMinutes = stations[i].durationMinutes; let nextStationMinutes = stations[i+1].durationMinutes; if(nextStationMinutes < currentStationMinutes) nextStationMinutes += 24*60; stationDurationSeconds = (nextStationMinutes - currentStationMinutes)*60; } else { stationDurationSeconds = stations[i].durationMinutes*60; }
+                if(elapsedSeconds < cumulativeTime + stationDurationSeconds){ if(nextStationIndex !== i){ nextStationIndex = i; arrivalAnnounced = false; updateStationListPreview(); } currentStationFound = true; if(arrivalAnnounceEnabled && elapsedSeconds > (cumulativeTime + stationDurationSeconds) - 3){ announceUpcomingArrival(); } break; }
+                cumulativeTime += stationDurationSeconds;
+            }
+            if(!currentStationFound && nextStationIndex < stations.length) nextStationIndex = stations.length;
+            if(elapsedSeconds >= 0) announceProgress(elapsedSeconds);
+            if(isRunning) animationFrameId = requestAnimationFrame(updateTrainPosition);
+        }
+
+        function startTimer(){ 
+            if(isRunning||totalDurationSeconds===0) return; 
+            if(isClockMode){ 
+                const now = new Date(); 
+                const nowMinutesSinceMidnight = now.getHours()*60 + now.getMinutes(); 
+                const endMinutesSinceMidnight = stations[stations.length-1].durationMinutes; 
+                let endIsTomorrow = stations[stations.length-1].durationMinutes < stations[0].durationMinutes; 
+                if(!endIsTomorrow && nowMinutesSinceMidnight*60 >= endMinutesSinceMidnight*60){ 
+                    displayMessage("The journey's end time has already passed. Please define future station times to start.", true); 
+                    return; 
+                } 
+                startTime = 0; 
+                elapsedTimeOnPause = 0; 
+            } else { 
+                startTime = Date.now(); 
+            }
+            initializeAudio(); calculateMovementDimensions(); lastProgressAnnounceTime = isClockMode ? 0 : elapsedTimeOnPause; isRunning = true; if(!isClockMode && elapsedTimeOnPause>0){ const startPercentage = (elapsedTimeOnPause/totalDurationSeconds)*100; const startTranslationPx = (startPercentage/100)*maxTravelDistancePx; trainContainer.style.setProperty('--train-translate-x', `${Math.min(startTranslationPx,maxTravelDistancePx)}px`); } else { trainContainer.style.setProperty('--train-translate-x', `0px`); } if(chugAudio && !isMuted) chugAudio.play().catch(e=>console.error(e)); animationFrameId = requestAnimationFrame(updateTrainPosition);
+        }
+
+        function stopTimer(completed=false){ if(!isRunning && !completed) return; isRunning = false; cancelAnimationFrame(animationFrameId); if(chugAudio) chugAudio.pause(); if(window.speechSynthesis) window.speechSynthesis.cancel(); let finalElapsed = totalDurationSeconds; if(!isClockMode){ const timeElapsedSinceStart = (Date.now()-startTime)/1000; if(completed) elapsedTimeOnPause = totalDurationSeconds; else { elapsedTimeOnPause += timeElapsedSinceStart; finalElapsed = elapsedTimeOnPause; } }
+            if(completed){ trainContainer.style.setProperty('--train-translate-x', `${maxTravelDistancePx}px`); nextStationIndex = stations.length; if(chooAudio && !isMuted){ chooAudio.currentTime = 0; chooAudio.play().catch(e=>console.error(e)); } speak('Attention, we have arrived at the final destination. Journey completed.'); }
+            updateStatusDisplay(finalElapsed);
+        }
+        function resetTimer(){ isRunning=false; cancelAnimationFrame(animationFrameId); if(chugAudio){ chugAudio.pause(); chugAudio.currentTime=0; } if(window.speechSynthesis) window.speechSynthesis.cancel(); startTime=0; elapsedTimeOnPause=0; nextStationIndex=0; arrivalAnnounced=false; lastProgressAnnounceTime=0; trainContainer.style.setProperty('--train-translate-x', `0px`); updateStatusDisplay(0); updateStationListPreview(); }
+
+        // --- Station UI functions moved inside settings panel ---
+        function renderStationInputs(currentStations){ 
+            stationsInputContainer.innerHTML=''; 
+            if(currentStations.length===0){ 
+                if(isClockMode){ 
+                    const now = new Date(); 
+                    const minutesSinceMidnight = now.getHours()*60 + now.getMinutes(); 
+                    addStationField('Task 1', minutesSinceMidnight + 5, false); 
+                } else { 
+                    addStationField('Task 1', 5, false); 
+                } 
+                currentStations = stations; 
+            }
+            currentStations.forEach((station,index)=>{ 
+                const div=document.createElement('div'); 
+                div.className='flex items-center space-x-2 p-3 bg-gray-50 rounded-lg shadow-sm'; 
+                div.setAttribute('data-id', station.id); 
+                let timeInputHTML=''; 
+                if(isClockMode){ 
+                    const hours = Math.floor(station.durationMinutes/60).toString().padStart(2,'0'); 
+                    const minutes = (station.durationMinutes%60).toString().padStart(2,'0'); 
+                    const timeValue = `${hours}:${minutes}`; 
+                    timeInputHTML = `<input type="time" value="${timeValue}" data-field="time" class="w-28 p-2 border rounded focus:ring-2 focus:ring-indigo-500 text-sm"><span class="text-gray-600">Time</span>`; 
+                } else { 
+                    timeInputHTML = `<input type="number" value="${station.durationMinutes}" min="1" max="600" data-field="duration" class="w-20 p-2 border rounded text-sm text-center focus:ring-2 focus:ring-indigo-500"><span class="text-gray-600">min</span>`; 
+                }
+                div.innerHTML = `
+                    <span class="text-gray-500 font-bold w-4">${index+1}.</span>
+                    <input type="text" value="${station.name}" placeholder="Station Name (e.g., Task 1)" data-field="name" class="flex-grow p-2 border rounded focus:ring-2 focus:ring-indigo-500 text-sm">
+                    ${timeInputHTML}
+                    <button class="remove-station-btn text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-colors">
+                        <svg xmlns=\"http://www.w3.org/2000/svg\" class=\"h-5 w-5\" viewBox=\"0 0 20 20\" fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z\" clip-rule=\"evenodd\" /></svg>
+                    </button>
+                `; 
+                stationsInputContainer.appendChild(div); 
+            }); 
+        }
+        function addStationField(name='New Task', durationOrTime=5, shouldRender=true){ 
+            const newStation = { id: Date.now(), name: name, durationMinutes: durationOrTime }; 
+            stations.push(newStation); 
+            if(shouldRender) renderStationInputs(stations); 
+        }
+        function removeStation(id){ 
+            stations = stations.filter(s=>s.id!==id); 
+            renderStationInputs(stations); 
+        }
+        function saveStations(){ 
+            const newStations=[]; let isValid=true; 
+            stationsInputContainer.querySelectorAll('[data-id]').forEach(div=>{ 
+                const nameInput = div.querySelector('input[data-field="name"]').value; 
+                let durationOrTimeValue; 
+                if(isClockMode){ 
+                    const timeInput = div.querySelector('input[data-field="time"]').value; 
+                    const [hours,minutes] = timeInput.split(':').map(Number); 
+                    durationOrTimeValue = hours*60 + minutes; 
+                    if(!timeInput || nameInput.trim()==='') isValid=false; 
+                } else { 
+                    durationOrTimeValue = parseInt(div.querySelector('input[data-field="duration"]').value); 
+                    if(nameInput.trim()===''|| durationOrTimeValue<=0 || isNaN(durationOrTimeValue)) isValid=false; 
+                } 
+                if(isValid){ 
+                    newStations.push({ id: parseInt(div.getAttribute('data-id')), name: nameInput, durationMinutes: durationOrTimeValue }); 
+                } 
+            }); 
+            
+            if(!isValid){ 
+                displayMessage('Please ensure all stations have a name and a valid time/duration.', true); 
+                return; 
+            } 
+            
+            if(isClockMode){ 
+                newStations.sort((a,b)=>a.durationMinutes-b.durationMinutes); 
+                if(newStations.length>1){ 
+                    let spanMinutes = newStations[newStations.length-1].durationMinutes - newStations[0].durationMinutes; 
+                    if(spanMinutes<=0) spanMinutes += 24*60; 
+                    if(spanMinutes<=0){ 
+                        displayMessage('In Clock Mode, you must define a journey span greater than zero minutes.', true); 
+                        return; 
+                    } 
+                } 
+            }
+            
+            stations = newStations; 
+            calculateTotalDuration(); 
+            stationModal.classList.add('hidden'); 
+            resetTimer(); 
+            updateStationListPreview(); 
+            updateStatusDisplay(0);
+            saveStationsToLocal(); // Save to local storage after successful save
+            displayMessage('Journey stations successfully saved and loaded!', false);
+        }
+
+        function generateStationMarkers(){ stationMarkersContainer.innerHTML=''; if(totalDurationSeconds===0) return; let cumulativeTime = 0; stations.forEach((station,index)=>{ let segmentDurationSeconds=0; if(isClockMode){ if(index===stations.length-1) return; const currentStationMinutes = station.durationMinutes; let nextStationMinutes = stations[index+1].durationMinutes; if(nextStationMinutes < currentStationMinutes) nextStationMinutes += 24*60; segmentDurationSeconds = (nextStationMinutes - currentStationMinutes)*60; } else { segmentDurationSeconds = station.durationMinutes*60; } cumulativeTime += segmentDurationSeconds; const positionPercentage = (cumulativeTime/totalDurationSeconds)*100; if(positionPercentage>0 && positionPercentage<100){ const marker = document.createElement('img'); marker.src = STATION_IMAGE_URL; marker.alt = `Station: ${station.name}`; let timeText=''; if(isClockMode){ const time = stations[index+1].durationMinutes; timeText = ' (' + Math.floor(time/60).toString().padStart(2,'0') + ':' + (time%60).toString().padStart(2,'0') + ')'; } marker.title = `Stop: ${stations[index+1].name}${timeText}`; marker.className = 'station-marker'; marker.style.left = `${positionPercentage}%`; stationMarkersContainer.appendChild(marker); } }); }
+
+        // --- CSV I/O Functions ---
+
+        function exportStationsToCSV() {
+            if (stations.length === 0) {
+                displayMessage('No stations defined to export.', true);
+                return;
+            }
+
+            const header = isClockMode ? 'Name,Time (HH:MM)\n' : 'Name,Duration (Minutes)\n';
+            const csvRows = stations.map(s => {
+                let value;
+                if (isClockMode) {
+                    const hours = Math.floor(s.durationMinutes / 60).toString().padStart(2, '0');
+                    const minutes = (s.durationMinutes % 60).toString().padStart(2, '0');
+                    value = `${hours}:${minutes}`;
+                } else {
+                    value = s.durationMinutes;
+                }
+                // Wrap names containing commas or quotes in double quotes, and escape internal quotes
+                const name = s.name.includes(',') || s.name.includes('"') ? `"${s.name.replace(/"/g, '""')}"` : s.name;
+                return `${name},${value}`;
+            }).join('\n');
+
+            const csvContent = header + csvRows;
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', isClockMode ? 'train_schedule_clock.csv' : 'train_schedule_timer.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            displayMessage('Stations exported successfully!', false);
+        }
+
+        function importStationsFromCSV(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const csvText = e.target.result;
+                    const lines = csvText.trim().split('\n').filter(line => line.trim() !== '');
+                    
+                    if (lines.length < 2) {
+                        displayMessage('CSV file must contain a header and at least one station.', true);
+                        return;
+                    }
+
+                    const header = lines[0].toLowerCase();
+                    const modeToLoad = header.includes('time') ? 'clock' : 'timer';
+                    const newStations = [];
+
+                    // Regular expression to handle CSV parsing: capture non-comma/quote, or content within quotes.
+                    const csvRegex = /(?:"(?:[^"]|"")*"|[^,]*)/g; 
+
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i];
+                        const parts = line.match(csvRegex).map(p => p.trim()).filter(p => p !== '');
+
+                        if (parts.length < 2) {
+                            console.warn(`Skipping malformed line: ${line}`);
+                            continue;
+                        }
+
+                        // Remove surrounding quotes and unescape double quotes
+                        let name = parts[0].replace(/^"|"$/g, '').replace(/""/g, '"').trim();
+                        let valueString = parts[1].trim();
+                        let durationMinutes;
+
+                        if (modeToLoad === 'clock') {
+                            // Expects HH:MM
+                            const timeMatch = valueString.match(/(\d{1,2}):(\d{2})/);
+                            if (!timeMatch) {
+                                displayMessage(`Error: Invalid time format (expected HH:MM) on line ${i+1}.`, true);
+                                return;
+                            }
+                            const [_, hours, minutes] = timeMatch;
+                            durationMinutes = parseInt(hours, 10) * 60 + parseInt(minutes, 10);
+                        } else {
+                            // Expects Duration (Minutes)
+                            durationMinutes = parseInt(valueString, 10);
+                            if (isNaN(durationMinutes) || durationMinutes <= 0) {
+                                displayMessage(`Error: Invalid duration (expected positive number) on line ${i+1}.`, true);
+                                return;
+                            }
+                        }
+
+                        newStations.push({
+                            id: Date.now() + i, // Generate unique ID
+                            name: name,
+                            durationMinutes: durationMinutes
+                        });
+                    }
+
+                    if (newStations.length > 0) {
+                        stations = newStations;
+                        setMode(modeToLoad === 'clock');
+                        calculateTotalDuration();
+                        resetTimer();
+                        updateStationListPreview();
+                        saveStationsToLocal();
+                        stationModal.classList.add('hidden');
+                        displayMessage(`Successfully loaded ${newStations.length} stations in ${modeToLoad.toUpperCase()} mode!`, false);
+                    } else {
+                        displayMessage('Could not parse any valid stations from the CSV file.', true);
+                    }
+
+                } catch (e) {
+                    console.error('Error processing CSV file:', e);
+                    displayMessage('An error occurred while processing the CSV file.', true);
+                } finally {
+                    loadCsvInput.value = ''; // Clear file input
+                }
+            };
+
+            reader.onerror = () => displayMessage('Failed to read file.', true);
+            reader.readAsText(file);
+        }
+
+        // --- Event wiring for settings open/close and controls ---
+        window.onload = function(){ 
+            // 1. Load data from local storage, fallback to default (Timer Mode)
+            if (!loadStationsFromLocal()) {
+                setMode(false); // Default to Timer Mode if no local data
+            }
+            
+            calculateMovementDimensions();
+            
+            openSettingsBtn.addEventListener('click', ()=>{ settingsPanel.style.display='block'; });
+            settingsBackdrop.addEventListener('click', ()=>{ settingsPanel.style.display='none'; });
+            closeSettingsBtn.addEventListener('click', ()=>{ settingsPanel.style.display='none'; });
+            modeTimerButton.addEventListener('click', ()=> setMode(false));
+            modeClockButton.addEventListener('click', ()=> setMode(true));
+            arrivalToggle.addEventListener('change', (e)=> arrivalAnnounceEnabled = e.target.checked);
+            progressToggle.addEventListener('change', (e)=>{ progressAnnounceEnabled = e.target.checked; progressIntervalInput.disabled = !e.target.checked; if(e.target.checked) lastProgressAnnounceTime = elapsedTimeOnPause - progressIntervalSeconds; });
+            progressIntervalInput.addEventListener('change', (e)=>{ const val = parseInt(e.target.value,10); if(val>=10) progressIntervalSeconds = val; else e.target.value = progressIntervalSeconds; });
+
+            addStationButton.addEventListener('click', ()=>{ stationModal.classList.remove('hidden'); renderStationInputs(stations); settingsPanel.style.display='none'; });
+            stationModal.querySelector('.modal-backdrop').addEventListener('click', ()=> stationModal.classList.add('hidden'));
+            addStationFieldButton.addEventListener('click', ()=>{ if(isClockMode){ const now = new Date(); const minutesSinceMidnight = now.getHours()*60 + now.getMinutes(); addStationField('New Task', minutesSinceMidnight+5); } else addStationField('New Task',5); });
+            saveStationsButton.addEventListener('click', saveStations);
+            stationsInputContainer.addEventListener('click', (e)=>{ if(e.target.closest('.remove-station-btn')){ const id = parseInt(e.target.closest('[data-id]').getAttribute('data-id')); removeStation(id); } });
+
+            startResetButton.addEventListener('click', ()=>{ const isFinished = elapsedTimeOnPause >= totalDurationSeconds && totalDurationSeconds > 0; if(isRunning) stopTimer(false); else if(isFinished) resetTimer(); else if(totalDurationSeconds>0) startTimer(); });
+            muteButton.addEventListener('click', ()=>{ initializeAudio(); setMute(!isMuted); });
+            
+            // CSV Wiring
+            exportCsvButton.addEventListener('click', exportStationsToCSV);
+            importCsvButton.addEventListener('click', () => loadCsvInput.click()); // Trigger file input click
+            loadCsvInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    importStationsFromCSV(e.target.files[0]);
+                }
+            });
+
+            window.addEventListener('resize', ()=>{ calculateMovementDimensions(); generateStationMarkers(); if(!isClockMode){ const startPercentage = (elapsedTimeOnPause/totalDurationSeconds)*100; const startTranslationPx = (startPercentage/100)*maxTravelDistancePx; trainContainer.style.setProperty('--train-translate-x', `${Math.min(startTranslationPx,maxTravelDistancePx)}px`); } });
+        };
+    </script>
+</body>
+</html>
