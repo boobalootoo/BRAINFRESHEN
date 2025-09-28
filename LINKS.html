@@ -6,13 +6,15 @@
     <title>Categorized Project Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.fonts.gstatic.com" crossorigin>
+    <!-- Corrected font link: changed fonts.fonts.gstatic.com to fonts.gstatic.com -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
         }
+        /* Modal Backdrop */
         .modal {
             display: none;
             position: fixed;
@@ -21,13 +23,14 @@
             top: 0;
             width: 100%;
             height: 100%;
-            overflow: auto;
+            overflow: hidden; /* Prevent scroll on the background */
             background-color: rgba(0,0,0,0.7);
             backdrop-filter: blur(8px);
             justify-content: center;
             align-items: center;
             padding: 10px;
         }
+        /* Modal Content Container */
         .modal-content {
             background-color: #fefefe;
             padding: 0;
@@ -41,27 +44,29 @@
             overflow: hidden;
             position: relative;
         }
+        /* Close Button Styling */
         .close {
             color: #fff;
             font-size: 32px;
             font-weight: bold;
             position: absolute;
-            top: 10px;
+            top: 50%;
             right: 15px;
+            transform: translateY(-50%);
             line-height: 1;
             transition: color 0.2s;
+            cursor: pointer;
         }
         .close:hover,
         .close:focus {
             color: #d1d5db;
-            text-decoration: none;
-            cursor: pointer;
         }
+        /* Iframe Styling */
         .modal-iframe {
             flex-grow: 1;
             border-radius: 0 0 16px 16px;
         }
-        /* Card Grid: Single column on mobile, two columns on desktop */
+        /* Card Grid: Mobile first (1 column), then Tablet/Desktop (2 columns) */
         .category-grid {
             display: grid;
             grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -73,9 +78,15 @@
             }
         }
         /* Custom card focus style */
+        .card-main-area {
+            transition: background-color 0.15s;
+        }
+        .card-main-area:hover {
+            background-color: #f9fafb; /* Light hover background */
+        }
         .card-main-area:focus {
-            outline: 2px solid theme('colors.blue.500');
-            outline-offset: 2px;
+            outline: 3px solid theme('colors.blue.500');
+            outline-offset: 3px;
             border-radius: 10px;
         }
     </style>
@@ -89,13 +100,15 @@
     <!-- Modal window -->
     <div id="urlModal" class="modal">
         <div class="modal-content shadow-2xl border border-gray-300">
+            <!-- Modal Header -->
             <div class="p-4 bg-blue-600 flex justify-between items-center rounded-t-2xl relative">
                 <div class="flex-1 overflow-hidden pr-10">
                      <p id="modalTitle" class="text-lg sm:text-xl font-bold text-white truncate"></p>
                 </div>
                 <!-- Close button -->
-                <span class="close" style="right: 15px; top: 50%; transform: translateY(-50%);">&times;</span>
+                <span class="close" title="Close Preview">&times;</span>
             </div>
+            <!-- Iframe for content preview -->
             <iframe id="urlIframe" class="modal-iframe w-full h-full" frameborder="0"></iframe>
         </div>
     </div>
@@ -103,6 +116,7 @@
     <!-- URL list Grid Container -->
     <div id="urlList" class="space-y-10">
         <!-- Categorized card sections will be generated here by JavaScript -->
+        <p id="loadingIndicator" class="text-center text-gray-500">Loading dashboard...</p>
     </div>
 </div>
 
@@ -142,6 +156,7 @@
     const urlIframe = document.getElementById('urlIframe');
     const modalTitle = document.getElementById('modalTitle');
     const closeBtn = document.querySelector('.close');
+    const loadingIndicator = document.getElementById('loadingIndicator');
 
     /**
      * Groups the URL data by category.
@@ -150,114 +165,134 @@
      */
     function groupByCategory(list) {
         return list.reduce((acc, item) => {
-            if (!acc[item.category]) {
-                acc[item.category] = [];
+            // Remove emojis and trim the category name for consistent grouping
+            const cleanCategory = item.category.replace(/[\uD800-\uDBFF\uDC00-\uDFFF]/g, '').trim(); 
+            
+            if (!acc[cleanCategory]) {
+                acc[cleanCategory] = [];
             }
-            acc[item.category].push(item);
+            acc[cleanCategory].push(item);
             return acc;
         }, {});
     }
 
     // Function to create and append card buttons, grouped by category
     function createCategorizedDashboard() {
-        const groupedUrls = groupByCategory(urls);
-        urlList.innerHTML = ''; // Clear existing content
+        try {
+            const groupedUrls = groupByCategory(urls);
+            urlList.innerHTML = ''; // Clear indicator and existing content
 
-        // Define the order of categories for presentation
-        const categoryOrder = [
-            'Interactive & Camera',
-            'Learning & Education',
-            'Wellbeing & Focus',
-            'Creative & Visual Arts',
-            'Music & Communication'
-        ];
+            // Define the order of categories (using clean keys) for presentation
+            const categoryOrder = [
+                'Interactive & Camera',
+                'Learning & Education',
+                'Wellbeing & Focus',
+                'Creative & Visual Arts',
+                'Music & Communication'
+            ];
 
-        categoryOrder.forEach(category => {
-            const sites = groupedUrls[category];
-            if (!sites || sites.length === 0) return;
-
-            // 1. Create Category Heading
-            const categorySection = document.createElement('section');
-            categorySection.className = 'category-section';
-
-            const divider = document.createElement('hr');
-            divider.className = 'border-t-2 border-gray-200 mb-6 mt-4';
-            categorySection.appendChild(divider);
-            
-            const header = document.createElement('h2');
-            header.className = 'text-2xl font-extrabold text-gray-800 mb-6 px-3 py-1 rounded-lg inline-block bg-blue-100 shadow-md';
-            header.textContent = category;
-            categorySection.appendChild(header);
-
-            // 2. Create Grid Container for Cards
-            const gridContainer = document.createElement('div');
-            gridContainer.className = 'category-grid';
-
-            sites.forEach(site => {
-                // Outer card container
-                const card = document.createElement('div');
-                card.className = 'bg-white border border-gray-200 rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl flex flex-col justify-between';
-
-                // Main Clickable Area (for Modal Preview)
-                const mainArea = document.createElement('button');
-                mainArea.className = 'card-main-area w-full p-5 text-left flex flex-col justify-start items-start space-y-2 cursor-pointer bg-white rounded-t-xl';
-                mainArea.onclick = () => {
-                    urlIframe.src = site.url;
-                    modalTitle.textContent = site.title + ' Preview';
-                    urlModal.style.display = 'flex';
-                };
+            categoryOrder.forEach(cleanCategory => {
+                // Find the original category name to include emojis in the header
+                const originalCategory = urls.find(u => u.category.replace(/[\uD800-\uDBFF\uDC00-\uDFFF]/g, '').trim() === cleanCategory)?.category || cleanCategory;
                 
-                // Card Title
-                const title = document.createElement('h3');
-                title.className = 'text-xl font-bold text-blue-700';
-                title.textContent = site.title;
+                const sites = groupedUrls[cleanCategory];
+                if (!sites || sites.length === 0) return;
 
-                // Full Description
-                const description = document.createElement('p');
-                description.className = 'text-gray-700 text-base font-medium';
-                description.textContent = site.description;
+                // 1. Create Category Heading
+                const categorySection = document.createElement('section');
+                categorySection.className = 'category-section';
 
-                mainArea.appendChild(title);
-                mainArea.appendChild(description);
+                const divider = document.createElement('hr');
+                divider.className = 'border-t-2 border-gray-200 mb-6 mt-4';
+                categorySection.appendChild(divider);
                 
-                // New Tab Button Container
-                const newTabContainer = document.createElement('div');
-                newTabContainer.className = 'w-full p-3 border-t border-gray-200 bg-gray-50 rounded-b-xl';
+                const header = document.createElement('h2');
+                header.className = 'text-2xl font-extrabold text-gray-800 mb-6 px-3 py-1 rounded-lg inline-block bg-blue-100 shadow-md';
+                header.textContent = originalCategory; // Use original category name with emojis
+                categorySection.appendChild(header);
 
-                const newTabButton = document.createElement('a');
-                newTabButton.className = 'w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-150';
-                newTabButton.href = site.url;
-                newTabButton.target = '_blank'; // Opens in a new tab
-                newTabButton.textContent = 'Open in New Tab (Full Screen)';
-                
-                newTabContainer.appendChild(newTabButton);
+                // 2. Create Grid Container for Cards
+                const gridContainer = document.createElement('div');
+                gridContainer.className = 'category-grid';
 
-                card.appendChild(mainArea);
-                card.appendChild(newTabContainer);
+                sites.forEach(site => {
+                    // Outer card container
+                    const card = document.createElement('div');
+                    card.className = 'bg-white border border-gray-200 rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl flex flex-col justify-between';
 
-                gridContainer.appendChild(card);
+                    // Main Clickable Area (for Modal Preview)
+                    const mainArea = document.createElement('button');
+                    mainArea.className = 'card-main-area w-full p-5 text-left flex flex-col justify-start items-start space-y-2 cursor-pointer bg-white rounded-t-xl';
+                    mainArea.setAttribute('tabindex', '0'); // Make button focusable
+                    mainArea.onclick = () => {
+                        urlIframe.src = site.url;
+                        modalTitle.textContent = site.title + ' Preview';
+                        urlModal.style.display = 'flex';
+                    };
+                    
+                    // Card Title
+                    const title = document.createElement('h3');
+                    title.className = 'text-xl font-bold text-blue-700';
+                    title.textContent = site.title;
+
+                    // Full Description
+                    const description = document.createElement('p');
+                    description.className = 'text-gray-700 text-base font-medium';
+                    description.textContent = site.description;
+
+                    mainArea.appendChild(title);
+                    mainArea.appendChild(description);
+                    
+                    // New Tab Button Container
+                    const newTabContainer = document.createElement('div');
+                    newTabContainer.className = 'w-full p-3 border-t border-gray-200 bg-gray-50 rounded-b-xl';
+
+                    const newTabButton = document.createElement('a');
+                    newTabButton.className = 'w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-150';
+                    newTabButton.href = site.url;
+                    newTabButton.target = '_blank'; // Opens in a new tab
+                    newTabButton.textContent = 'Open in New Tab (Full Screen)';
+                    
+                    newTabContainer.appendChild(newTabButton);
+
+                    card.appendChild(mainArea);
+                    card.appendChild(newTabContainer);
+
+                    gridContainer.appendChild(card);
+                });
+
+                categorySection.appendChild(gridContainer);
+                urlList.appendChild(categorySection);
             });
+            // Remove loading indicator once content is generated
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
 
-            categorySection.appendChild(gridContainer);
-            urlList.appendChild(categorySection);
-        });
+        } catch (error) {
+            console.error("Error creating dashboard:", error);
+            urlList.innerHTML = `<p class="text-red-600 text-center font-bold">Failed to load dashboard. Check the console for errors.</p>`;
+        }
     }
 
     // Modal control logic
     closeBtn.onclick = function() {
         urlModal.style.display = 'none';
-        urlIframe.src = ''; // Clear the iframe
+        urlIframe.src = ''; // Clear the iframe content for performance/security
     }
 
+    // Close modal when clicking outside of it
     window.onclick = function(event) {
         if (event.target == urlModal) {
             urlModal.style.display = 'none';
-            urlIframe.src = ''; // Clear the iframe
+            urlIframe.src = ''; // Clear the iframe content
         }
     }
 
     // Initialize the categorized dashboard
-    createCategorizedDashboard();
+    document.addEventListener('DOMContentLoaded', createCategorizedDashboard);
+    // Since the script is at the end of the body, we can also call it directly.
+    createCategorizedDashboard(); 
 
 </script>
 
