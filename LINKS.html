@@ -6,7 +6,7 @@
     <title>Categorized Project Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <!-- Corrected font link: changed fonts.fonts.gstatic.com to fonts.gstatic.com -->
+    <!-- Corrected font link from previous fix -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
     <style>
@@ -116,7 +116,6 @@
     <!-- URL list Grid Container -->
     <div id="urlList" class="space-y-10">
         <!-- Categorized card sections will be generated here by JavaScript -->
-        <p id="loadingIndicator" class="text-center text-gray-500">Loading dashboard...</p>
     </div>
 </div>
 
@@ -156,7 +155,6 @@
     const urlIframe = document.getElementById('urlIframe');
     const modalTitle = document.getElementById('modalTitle');
     const closeBtn = document.querySelector('.close');
-    const loadingIndicator = document.getElementById('loadingIndicator');
 
     /**
      * Groups the URL data by category.
@@ -165,13 +163,13 @@
      */
     function groupByCategory(list) {
         return list.reduce((acc, item) => {
-            // Remove emojis and trim the category name for consistent grouping
-            const cleanCategory = item.category.replace(/[\uD800-\uDBFF\uDC00-\uDFFF]/g, '').trim(); 
+            // Use the full category string (including emojis) as the key
+            const categoryKey = item.category.trim(); 
             
-            if (!acc[cleanCategory]) {
-                acc[cleanCategory] = [];
+            if (!acc[categoryKey]) {
+                acc[categoryKey] = [];
             }
-            acc[cleanCategory].push(item);
+            acc[categoryKey].push(item);
             return acc;
         }, {});
     }
@@ -180,22 +178,19 @@
     function createCategorizedDashboard() {
         try {
             const groupedUrls = groupByCategory(urls);
-            urlList.innerHTML = ''; // Clear indicator and existing content
+            urlList.innerHTML = ''; // Clear existing content
 
-            // Define the order of categories (using clean keys) for presentation
+            // Use the exact category strings (including emojis) to ensure correct iteration
             const categoryOrder = [
-                'Interactive & Camera',
-                'Learning & Education',
-                'Wellbeing & Focus',
-                'Creative & Visual Arts',
-                'Music & Communication'
+                'Interactive & Camera📸',
+                'Learning & Education🧑‍🏫',
+                'Wellbeing & Focus🧠🧘',
+                'Creative & Visual Arts🎨',
+                'Music & Communication🎵🗣️'
             ];
 
-            categoryOrder.forEach(cleanCategory => {
-                // Find the original category name to include emojis in the header
-                const originalCategory = urls.find(u => u.category.replace(/[\uD800-\uDBFF\uDC00-\uDFFF]/g, '').trim() === cleanCategory)?.category || cleanCategory;
-                
-                const sites = groupedUrls[cleanCategory];
+            categoryOrder.forEach(category => {
+                const sites = groupedUrls[category];
                 if (!sites || sites.length === 0) return;
 
                 // 1. Create Category Heading
@@ -208,7 +203,7 @@
                 
                 const header = document.createElement('h2');
                 header.className = 'text-2xl font-extrabold text-gray-800 mb-6 px-3 py-1 rounded-lg inline-block bg-blue-100 shadow-md';
-                header.textContent = originalCategory; // Use original category name with emojis
+                header.textContent = category; // Use the full category name
                 categorySection.appendChild(header);
 
                 // 2. Create Grid Container for Cards
@@ -223,7 +218,7 @@
                     // Main Clickable Area (for Modal Preview)
                     const mainArea = document.createElement('button');
                     mainArea.className = 'card-main-area w-full p-5 text-left flex flex-col justify-start items-start space-y-2 cursor-pointer bg-white rounded-t-xl';
-                    mainArea.setAttribute('tabindex', '0'); // Make button focusable
+                    mainArea.setAttribute('tabindex', '0');
                     mainArea.onclick = () => {
                         urlIframe.src = site.url;
                         modalTitle.textContent = site.title + ' Preview';
@@ -264,10 +259,6 @@
                 categorySection.appendChild(gridContainer);
                 urlList.appendChild(categorySection);
             });
-            // Remove loading indicator once content is generated
-            if (loadingIndicator) {
-                loadingIndicator.remove();
-            }
 
         } catch (error) {
             console.error("Error creating dashboard:", error);
@@ -278,21 +269,19 @@
     // Modal control logic
     closeBtn.onclick = function() {
         urlModal.style.display = 'none';
-        urlIframe.src = ''; // Clear the iframe content for performance/security
+        urlIframe.src = ''; 
     }
 
     // Close modal when clicking outside of it
     window.onclick = function(event) {
         if (event.target == urlModal) {
             urlModal.style.display = 'none';
-            urlIframe.src = ''; // Clear the iframe content
+            urlIframe.src = ''; 
         }
     }
 
     // Initialize the categorized dashboard
-    document.addEventListener('DOMContentLoaded', createCategorizedDashboard);
-    // Since the script is at the end of the body, we can also call it directly.
-    createCategorizedDashboard(); 
+    createCategorizedDashboard();
 
 </script>
 
