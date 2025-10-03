@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Instructables Metadata Fetcher</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-6 bg-gray-100">
+  <h1 class="text-xl font-bold mb-4">Instructables Metadata Fetcher</h1>
+  
+  <textarea id="urls" class="w-full p-2 border mb-4" rows="8"
+    placeholder="Paste Instructables URLs here, one per line"></textarea>
+  
+  <div class="space-x-2 mb-4">
+    <button id="fetchBtn" class="bg-blue-500 text-white px-4 py-2 rounded">
+      Fetch Metadata
+    </button>
+    <button id="downloadBtn" class="bg-green-500 text-white px-4 py-2 rounded" disabled>
+      Download CSV
+    </button>
+  </div>
+  
+  <table class="mt-6 w-full border text-sm">
+    <thead class="bg-gray-200">
+      <tr>
+        <th class="border px-2">URL</th>
+        <th class="border px-2">Title</th>
+        <th class="border px-2">Description</th>
+        <th class="border px-2">Thumbnail</th>
+        <th class="border px-2">Tags</th>
+      </tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+  
+  <script>
+    async function fetchMetadata(url) {
+      try {
+        const proxy = "https://api.allorigins.win/get?url=";
+        const res = await fetch(proxy + encodeURIComponent(url));
+        const data = await res.json();
+        const html = data.contents;
+        
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        
+        const title = doc.querySelector("title")?.innerText || "";
+        const description = doc.querySelector('meta[name="description"]')?.content || "";
+        const thumbnail = doc.querySelector('meta[property="og:image"]')?.content || "";
+        const tags = doc.querySelector('meta[name="keywords"]')?.content || "";
+        
+        return { url, title, description, thumbnail, tags };
+      } catch (err) {
+        return { url, title: "", description: "", thumbnail: "", tags: "" };
+      }
+    }
+
+    async function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    document.getElementById("fetchBtn").addEventListener("click", async () => {
+      const urls = document.getElementById("urls").value.split("\n").map(u => u.trim()).filter(Boolean);
+      const tbody = document.getElementById("results");
+      tbody.innerHTML = "";
+      
+      window.resultsData = [];
+      
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
+        const meta = await fetchMetadata(url);
+        
+        // Save for CSV later
+        window.resultsData.push(meta);
+        
+        tbody.innerHTML += `
+          <tr>
+            <td class="border px-2"><a href="${meta.url}" target="_blank">${meta.url}</a></td>
+            <td class="border px-2">${meta.title}</td>
+            <td class="border px-2">${meta.description}</td>
+            <td class="border px-2">${meta.thumbnail}</td>
+            <td class="border px-2">${meta.tags}</td>
+          </tr>`;
+        
+        // Small delay to avoid hitting rate limits
+        await delay(1200);
+      }
+      
+      document.getElementById("downloadBtn").disabled = false;
+    });
+
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      if (!window.resultsData || window.resultsData.length === 0) return;
+
+      const headers = ["url", "title", "description", "thumbnail", "tags"];
+      const rows = [headers.join(",")];
+      
+      for (const row of window.resultsData) {
+        const line = [
+          row.url,
+          `"${row.title.replace(/"/g, '""')}"`,
+          `"${row.description.replace(/"/g, '""')}"`,
+          row.thumbnail,
+          `"${row.tags.replace(/"/g, '""')}"`
+        ].join(",");
+        rows.push(line);
+      }
+
+      const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "instructables_metadata.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
