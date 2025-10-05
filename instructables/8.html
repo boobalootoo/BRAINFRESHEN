@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSV Thumbnails with Filters, Search, Voting, and Lists</title>
+  <style>
+    :root{--thumb-w:180px}
+    body { font-family: Arial, sans-serif; padding: 18px; }
+    .top-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+    #searchBar{padding:6px;border:1px solid #ccc;border-radius:6px;min-width:240px}
+    .filters { margin-bottom: 10px; display:flex;flex-wrap:wrap;gap:6px }
+    .filter-btn { background: #eee; border: 1px solid #ccc; border-radius: 5px; padding: 6px 10px; cursor: pointer; }
+    .filter-btn.active { background: #007acc; color: white; border-color: #007acc; }
+    #columnSelector{margin:10px 0}
+    #columnSelector label{margin-right:8px}
+    .table-wrap{overflow:auto}
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: auto; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: middle; white-space: normal; }
+    th.thumb-col, td.thumb-col { width: var(--thumb-w); max-width: var(--thumb-w); }
+    img.thumb { width: calc(var(--thumb-w) - 12px); height: auto; max-height: 120px; border-radius: 6px; object-fit: cover; display:block }
+    .vote-btn { cursor: pointer; padding: 4px 8px; border-radius: 4px; background: #f3f3f3; border: 1px solid #ccc; margin-right: 5px; }
+    .vote-btn:hover { background: #007acc; color: #fff; }
+    .vote-count { font-weight: bold; margin-left:6px }
+    #listManager{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+    #listSelect{min-width:160px}
+    .note{color:#666;margin-top:8px}
+    button.small{padding:6px 8px;border-radius:6px;border:1px solid #aaa;background:#fff}
+  </style>
+</head>
+<body>
+  <div class="top-row">
+    <input type="text" id="searchBar" placeholder="Search title, description, tags or variants..." />
+    <div id="filters" class="filters" aria-live="polite"></div>
+  </div>
+
+  <div id="columnSelector"></div>
+
+  <div id="listManager">
+    <input type="text" id="newListName" placeholder="New list name" />
+    <button class="small" id="createListBtn">Create List</button>
+    <select id="listSelect"><option value="">— choose list —</option></select>
+    <button class="small" id="viewListBtn">View List</button>
+    <button class="small" id="clearListsBtn">Clear Lists</button>
+  </div>
+
+  <div id="tableWrap" class="table-wrap">Loading...</div>
+  <div class="note">Tags are case-insensitive and split by semicolons. Votes & lists persist in localStorage. You can remove items from lists or vote without leaving them.</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script>
+    const csvUrl = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/instructables/info.csv';
+    let allRows = [], activeFilters = [];
+    let votes = JSON.parse(localStorage.getItem('votes') || '{}');
+    let lists = JSON.parse(localStorage.getItem('lists') || '{}');
+    let visibleColumns = JSON.parse(localStorage.getItem('visibleColumns') || 'null');
+    let currentListView = null;
+
+    function extractImageUrl(raw){
+      if(!raw) return null;
+      let s = (''+raw).trim().replace(/^=+/, '').replace(/^\"|\"$/g,'').trim();
+      const urlMatch = s.match(/https?:\/\/\S+/i);
+      if(urlMatch){
+        let url = urlMatch[0].replace(/[\)\]"',;]+$/,'');
+        if(url.includes('github.com') && url.includes('/blob/')){
+          url = url.replace('github.com','raw.githubusercontent.com').replace('/blob/','/');
+        }
+        if(/\.(jpg|jpeg|png|gif|webp)(?:\?|$)/i.test(url) || /raw\.githubusercontent\.com/i.test(url)) return url;
+      }
+      if(/^data:image\//i.test(s)) return s;
+      return null;
+    }
+
+    function safeGetFields(rows){ return rows.length ? Object.keys(rows[0]) : []; }
+
+    async function loadCSV(){
+      const res = await fetch(csvUrl);
+      const text = await res.text();
+      const parsed = Papa.parse(text, { header:true, skipEmptyLines:true });
+      allRows = (parsed.data||[]).map(r=>{const o={};for(let k in r)o[k]=r[k]||'';return o;});
+      const fields = safeGetFields(allRows);
+      if(!visibleColumns) visibleColumns = [...fields];
+      createFilters(allRows); createColumnSelector(fields); populateLists(); renderTable(allRows);
+    }
+
+    function createFilters(rows){
+      const f = document.getElementById('filters'); f.innerHTML='';
+      const set=new Set();
+      rows.forEach(r=>r.tags&&r.tags.split(';').map(t=>t.trim().toLowerCase()).forEach(t=>set.add(t)));
+      Array.from(set).sort().forEach(tag=>{
+        const b=document.createElement('button');b.textContent=tag;b.className='filter-btn';
+        b.onclick=()=>{const i=activeFilters.indexOf(tag);if(i>=0)activeFilters.splice(i,1);else activeFilters.push(tag);applyFilters();updateFilterButtons();};
+        f.appendChild(b);
+      });
+    }
+    function updateFilterButtons(){
+      document.querySelectorAll('.filter-btn').forEach(b=>{
+        b.classList.toggle('active',activeFilters.includes(b.textContent.toLowerCase()));
+      });
+    }
+
+    function applyFilters(){
+      const search=(document.getElementById('searchBar').value||'').toLowerCase();
+      let filtered=allRows.filter(r=>{
+        const text=[r.title,r.description,r.tags,r.variants].join(' ').toLowerCase();
+        const searchMatch=!search||text.includes(search);
+        const tagMatch=!activeFilters.length||activeFilters.every(f=>r.tags.toLowerCase().split(';').map(t=>t.trim()).includes(f));
+        return searchMatch&&tagMatch;
+      });
+      renderTable(filtered);
+    }
+
+    function vote(id,delta){
+      votes[id]=(votes[id]||0)+delta;
+      localStorage.setItem('votes',JSON.stringify(votes));
+      if(currentListView) viewList(currentListView); else applyFilters();
+    }
+
+    function createColumnSelector(fields){
+      const c=document.getElementById('columnSelector');c.innerHTML='';
+      const all=document.createElement('button');all.textContent='All';all.className='small';
+      const none=document.createElement('button');none.textContent='None';none.className='small';
+      all.onclick=()=>{visibleColumns=[...fields];saveCols();renderTable(allRows)};
+      none.onclick=()=>{visibleColumns=[];saveCols();renderTable(allRows)};
+      c.append(all,none);
+      fields.forEach(f=>{
+        const l=document.createElement('label');const cb=document.createElement('input');
+        cb.type='checkbox';cb.checked=visibleColumns.includes(f);
+        cb.onchange=()=>{if(cb.checked)visibleColumns.push(f);else visibleColumns=visibleColumns.filter(x=>x!==f);saveCols();renderTable(allRows)};
+        l.append(cb,document.createTextNode(' '+f));c.append(l);
+      });
+    }
+    function saveCols(){localStorage.setItem('visibleColumns',JSON.stringify(visibleColumns));}
+
+    function populateLists(){
+      const s=document.getElementById('listSelect');s.innerHTML='<option value="">— choose list —</option>';
+      Object.keys(lists).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;s.append(o)});
+    }
+
+    function createList(){
+      const n=document.getElementById('newListName').value.trim();if(!n)return alert('Enter name');
+      if(!lists[n])lists[n]=[];localStorage.setItem('lists',JSON.stringify(lists));populateLists();
+    }
+
+    function addToList(id){
+      const sel=document.getElementById('listSelect').value;if(!sel)return alert('Choose list');
+      if(!lists[sel])lists[sel]=[];if(!lists[sel].includes(id))lists[sel].push(id);
+      localStorage.setItem('lists',JSON.stringify(lists));alert('Added to '+sel);
+    }
+
+    function removeFromList(id){
+      const sel=document.getElementById('listSelect').value;if(!sel)return;
+      if(lists[sel]){lists[sel]=lists[sel].filter(x=>x!==id);localStorage.setItem('lists',JSON.stringify(lists));if(currentListView===sel)viewList(sel);}
+    }
+
+    function viewList(name){
+      const n=name||document.getElementById('listSelect').value;if(!n)return alert('Choose list');
+      currentListView=n;const ids=lists[n]||[];const filtered=allRows.filter(r=>ids.includes(r.title));renderTable(filtered);
+    }
+
+    function clearLists(){if(confirm('Clear all lists?')){lists={};localStorage.setItem('lists','{}');populateLists();}}
+
+    function detectThumbColumns(fields,rows){
+      const t=new Set();fields.forEach(f=>{for(let i=0;i<Math.min(5,rows.length);i++){if(extractImageUrl(rows[i][f])){t.add(f);break;}}});return t;
+    }
+
+    function renderTable(rows){
+      const w=document.getElementById('tableWrap');if(!rows.length){w.innerHTML='<p>No matches</p>';return;}
+      const fields=visibleColumns.length?visibleColumns:safeGetFields(rows);const thumbs=detectThumbColumns(fields,rows);
+      const table=document.createElement('table');const thead=document.createElement('thead');const trh=document.createElement('tr');
+      fields.forEach(f=>{const th=document.createElement('th');th.textContent=f;if(thumbs.has(f))th.classList.add('thumb-col');trh.append(th);});
+      trh.append(Object.assign(document.createElement('th'),{textContent:'Vote'}));
+      trh.append(Object.assign(document.createElement('th'),{textContent:'List'}));
+      thead.append(trh);table.append(thead);
+      const tb=document.createElement('tbody');
+      rows.forEach((r,i)=>{
+        const tr=document.createElement('tr');const id=r.title||('row'+i);
+        fields.forEach(f=>{
+          const td=document.createElement('td');if(thumbs.has(f))td.classList.add('thumb-col');
+          const v=r[f]||'';const url=extractImageUrl(v);
+          if(url){const img=document.createElement('img');img.src=url;img.className='thumb';td.append(img);}else td.textContent=v;tr.append(td);
+        });
+        const vtd=document.createElement('td');const up=document.createElement('button');up.textContent='👍';up.className='vote-btn';up.onclick=()=>vote(id,1);
+        const down=document.createElement('button');down.textContent='👎';down.className='vote-btn';down.onclick=()=>vote(id,-1);
+        const cnt=document.createElement('span');cnt.className='vote-count';cnt.textContent=votes[id]||0;
+        vtd.append(up,down,cnt);tr.append(vtd);
+        const ltd=document.createElement('td');const add=document.createElement('button');add.textContent='➕';add.className='small';add.onclick=()=>addToList(id);
+        const rem=document.createElement('button');rem.textContent='➖';rem.className='small';rem.onclick=()=>removeFromList(id);
+        ltd.append(add,rem);tr.append(ltd);
+        tb.append(tr);
+      });
+      table.append(tb);w.innerHTML='';w.append(table);
+    }
+
+    document.getElementById('searchBar').addEventListener('input',applyFilters);
+    document.getElementById('createListBtn').addEventListener('click',createList);
+    document.getElementById('viewListBtn').addEventListener('click',()=>viewList());
+    document.getElementById('clearListsBtn').addEventListener('click',clearLists);
+
+    loadCSV();
+  </script>
+</body>
+</html>
