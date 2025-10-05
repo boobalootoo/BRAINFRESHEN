@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSV Thumbnails with Voting</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    img.thumb { max-width: 160px; max-height: 120px; border-radius: 6px; object-fit: cover; }
+    .filters { margin-bottom: 10px; }
+    .filter-btn { background: #eee; border: 1px solid #ccc; border-radius: 5px; padding: 5px 10px; margin: 3px; cursor: pointer; }
+    .filter-btn.active { background: #007acc; color: white; border-color: #007acc; }
+    #searchBar { margin-bottom: 15px; padding: 6px; width: 100%; max-width: 400px; border: 1px solid #ccc; border-radius: 5px; }
+    .vote-btn { cursor: pointer; padding: 4px 8px; border-radius: 4px; background: #f3f3f3; border: 1px solid #ccc; margin-right: 5px; }
+    .vote-btn:hover { background: #007acc; color: #fff; }
+    .vote-count { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <input type="text" id="searchBar" placeholder="Search title, description, tags or variants..." oninput="applyFilters()">
+  <div class="filters" id="filters"></div>
+  <div id="tableWrap">Loading...</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script>
+    const csvUrl = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/instructables/info.csv';
+    let allRows = [];
+    let activeFilters = [];
+    let votes = JSON.parse(localStorage.getItem('votes') || '{}');
+
+    async function loadCSV() {
+      const res = await fetch(csvUrl);
+      const text = await res.text();
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+      allRows = parsed.data;
+      createFilters(allRows);
+      renderTable(allRows);
+    }
+
+    function createFilters(rows) {
+      const filterContainer = document.getElementById('filters');
+      const tagSet = new Set();
+
+      rows.forEach(row => {
+        if (row.tags) {
+          row.tags.split(';').map(t => t.trim()).filter(Boolean).forEach(tag => tagSet.add(tag));
+        }
+      });
+
+      const tags = Array.from(tagSet).sort();
+      tags.forEach(tag => {
+        const btn = document.createElement('button');
+        btn.textContent = tag;
+        btn.className = 'filter-btn';
+        btn.addEventListener('click', () => toggleFilter(tag, btn));
+        filterContainer.appendChild(btn);
+      });
+    }
+
+    function toggleFilter(tag, btn) {
+      if (activeFilters.includes(tag)) {
+        activeFilters = activeFilters.filter(t => t !== tag);
+        btn.classList.remove('active');
+      } else {
+        activeFilters.push(tag);
+        btn.classList.add('active');
+      }
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const searchTerm = document.getElementById('searchBar').value.toLowerCase();
+
+      let filtered = allRows.filter(row => {
+        const matchesSearch = [row.title, row.description, row.tags, row.variants]
+          .map(v => v ? v.toLowerCase() : '')
+          .some(text => text.includes(searchTerm));
+
+        if (activeFilters.length === 0) return matchesSearch;
+        const rowTags = (row.tags || '').split(';').map(t => t.trim());
+        const matchesFilters = activeFilters.every(tag => rowTags.includes(tag));
+        return matchesSearch && matchesFilters;
+      });
+
+      renderTable(filtered);
+    }
+
+    function vote(id, delta) {
+      if (!votes[id]) votes[id] = 0;
+      votes[id] += delta;
+      localStorage.setItem('votes', JSON.stringify(votes));
+      applyFilters(); // re-render to update counts even after filters
+    }
+
+    function renderTable(rows) {
+      if (!rows || rows.length === 0) {
+        document.getElementById('tableWrap').innerHTML = '<p>No matching entries.</p>';
+        return;
+      }
+
+      const fields = Object.keys(rows[0]);
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const trHead = document.createElement('tr');
+
+      fields.forEach(field => {
+        const th = document.createElement('th');
+        th.textContent = field;
+        trHead.appendChild(th);
+      });
+      const thVote = document.createElement('th');
+      thVote.textContent = 'Vote';
+      trHead.appendChild(thVote);
+
+      thead.appendChild(trHead);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+
+      rows.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        const id = row.title || ('row' + index);
+
+        fields.forEach(field => {
+          const td = document.createElement('td');
+          let value = row[field]?.trim() || '';
+
+          const imageMatch = value.match(/(https?:[^\"]+\.(jpg|jpeg|png|gif|webp))/i);
+          if (imageMatch) {
+            const img = document.createElement('img');
+            img.src = imageMatch[1].replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+            img.className = 'thumb';
+            td.appendChild(img);
+          } else {
+            td.textContent = value;
+          }
+          tr.appendChild(td);
+        });
+
+        const voteTd = document.createElement('td');
+        const upBtn = document.createElement('button');
+        upBtn.textContent = '👍';
+        upBtn.className = 'vote-btn';
+        upBtn.onclick = () => vote(id, 1);
+
+        const downBtn = document.createElement('button');
+        downBtn.textContent = '👎';
+        downBtn.className = 'vote-btn';
+        downBtn.onclick = () => vote(id, -1);
+
+        const count = document.createElement('span');
+        count.className = 'vote-count';
+        count.textContent = votes[id] || 0;
+
+        voteTd.append(upBtn, downBtn, count);
+        tr.appendChild(voteTd);
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      document.getElementById('tableWrap').innerHTML = '';
+      document.getElementById('tableWrap').appendChild(table);
+    }
+
+    loadCSV();
+  </script>
+</body>
+</html>
