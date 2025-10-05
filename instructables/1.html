@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Thumbnail Viewer</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar styling for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #9ca3af;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f3f4f6;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app" class="p-4 sm:p-8 max-w-7xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Project Thumbnails Viewer</h1>
+            <p class="text-gray-600">Visualizing data from the BRAINFRESHEN `info.csv`.</p>
+            <!-- New: Project Count Display -->
+            <p id="project-count" class="text-lg font-semibold text-blue-600 mt-4"></p>
+        </header>
+
+        <!-- Loading/Error Status -->
+        <div id="status-message" class="text-center text-xl font-medium text-blue-600">
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Loading CSV Data...
+        </div>
+
+        <!-- Data Grid Container -->
+        <div id="data-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Content will be injected here -->
+        </div>
+
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const RAW_CSV_URL = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/instructables/info.csv';
+        const FALLBACK_IMAGE = 'https://placehold.co/400x250/cbd5e1/4b5563?text=No+Image';
+        const EXPECTED_ROW_COUNT = 140; 
+        const EXPECTED_COLUMNS = 6; // url,title,description,thumbnail,tags,variants
+
+        // --- DOM Elements ---
+        const dataGrid = document.getElementById('data-grid');
+        const statusMessage = document.getElementById('status-message');
+        const projectCount = document.getElementById('project-count');
+
+        /**
+         * Robust CSV to JSON parser that handles commas inside double-quoted fields,
+         * and attempts to save all rows even if the column count is inconsistent.
+         * @param {string} csv - The raw CSV string data.
+         * @returns {Array<Object>} Array of objects representing the data rows.
+         */
+        function parseCSV(csv) {
+            const lines = csv.trim().split(/\r?\n/);
+            if (lines.length <= 1) return [];
+
+            // 1. Get headers (safe to split, assuming no quotes in headers)
+            const headers = lines[0].split(',').map(header => header.trim());
+            const numHeaders = headers.length;
+            
+            // This is the array that will hold ALL rows, including problematic ones
+            const processedRows = [];
+
+            // 2. Process data lines
+            lines.slice(1).forEach((line, index) => {
+                const values = [];
+                let inQuotes = false;
+                let currentField = "";
+
+                // Standard iterative parsing to respect quotes
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        values.push(currentField.trim().replace(/^"|"$/g, ''));
+                        currentField = "";
+                    } else {
+                        currentField += char;
+                    }
+                }
+                values.push(currentField.trim().replace(/^"|"$/g, ''));
+
+                const rowObject = {};
+                let isValid = true;
+
+                // If the column count is wrong, we try to fix it by truncating or padding
+                if (values.length !== numHeaders) {
+                    isValid = false;
+                    console.warn(`Line ${index + 2}: Column mismatch. Expected ${numHeaders}, found ${values.length}. Attempting to salvage row.`);
+
+                    // If too many columns (due to unquoted comma), truncate to expected headers
+                    if (values.length > numHeaders) {
+                        values.length = numHeaders;
+                    }
+                    // If too few, pad with empty strings
+                    while (values.length < numHeaders) {
+                        values.push('');
+                    }
+                }
+                
+                // Map the (potentially corrected) values to header names
+                headers.forEach((header, i) => {
+                    rowObject[header] = values[i] || ''; 
+                });
+                
+                // Add a flag to indicate if we had to salvage the row
+                rowObject.salvaged = !isValid;
+                
+                processedRows.push(rowObject);
+            });
+
+            return processedRows;
+        }
+
+        /**
+         * Creates an HTML card element for a single data row.
+         * @param {Object} rowData - The data object for the row (using header keys).
+         * @returns {string} The HTML string for the card.
+         */
+        function createCard(rowData) {
+            // Get data using header names
+            const title = rowData.title || 'Untitled Project';
+            const url = rowData.url || '#';
+            const imageUrl = rowData.thumbnail || FALLBACK_IMAGE;
+            const cardColor = rowData.salvaged ? 'bg-yellow-50 ring-2 ring-yellow-400' : 'bg-white';
+            const warningText = rowData.salvaged ? 
+                '<p class="text-sm font-medium text-yellow-700 p-2 bg-yellow-100 rounded-md mb-3">⚠️ Data warning: Column count was inconsistent on this row. Displayed data is an educated guess.</p>' 
+                : '';
+
+            // Start the card
+            let cardHtml = `
+                <a href="${url}" target="_blank" class="block">
+                    <div class="${cardColor} rounded-xl shadow-lg hover:shadow-xl hover:ring-2 hover:ring-blue-500 transition-all duration-300 overflow-hidden h-full">
+                        <!-- Data Warning Message (if applicable) -->
+                        ${warningText}
+                        <!-- Thumbnail Image -->
+                        <img src="${imageUrl}" alt="${title} Thumbnail"
+                            class="w-full h-48 object-cover object-center"
+                            onerror="this.onerror=null; this.src='${FALLBACK_IMAGE}';"
+                        >
+
+                        <div class="p-4 sm:p-6">
+                            <h2 class="text-xl font-bold text-gray-900 mb-3 line-clamp-2">${title}</h2>
+                            <dl class="space-y-3">
+                `;
+
+            // Iterate over all data fields for details (excluding url, title, thumbnail)
+            Object.keys(rowData).forEach(header => {
+                const value = rowData[header];
+
+                // Skip already displayed fields or internal flags
+                if (header === 'url' || header === 'title' || header === 'thumbnail' || header === 'salvaged') {
+                    return;
+                }
+                
+                if (value) {
+                    // Capitalize the first letter of the header for display
+                    const displayHeader = header.charAt(0).toUpperCase() + header.slice(1);
+
+                    // Display other data as definition list items
+                    cardHtml += `
+                        <div class="pt-2 border-t border-gray-100">
+                            <dt class="text-sm font-semibold text-gray-500">${displayHeader}</dt>
+                            <dd class="text-base text-gray-800 line-clamp-3">${value}</dd>
+                        </div>
+                    `;
+                }
+            });
+
+            // Close the definition list and card
+            cardHtml += `
+                            </dl>
+                        </div>
+                    </div>
+                </a>
+            `;
+            return cardHtml;
+        }
+
+
+        /**
+         * Main function to fetch and render the data.
+         */
+        async function fetchAndRenderData() {
+            // Implement exponential backoff for robust API calls
+            const MAX_RETRIES = 5;
+            let lastError = null;
+            projectCount.textContent = ''; // Clear previous count while loading
+            
+            // Start count with 1 to account for the header row that is excluded
+            const expectedLines = EXPECTED_ROW_COUNT + 1; 
+
+            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                try {
+                    const response = await fetch(RAW_CSV_URL);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+
+                    const csvText = await response.text();
+                    const lines = csvText.trim().split(/\r?\n/);
+                    
+                    // The total number of rows (including header)
+                    const totalLinesRead = lines.length; 
+                    
+                    const dataArray = parseCSV(csvText);
+
+                    if (dataArray.length === 0) {
+                        statusMessage.className = 'text-center text-xl font-medium text-yellow-600 p-4';
+                        statusMessage.textContent = 'CSV data is empty or could not be parsed. Check the console for any skipped rows.';
+                        projectCount.textContent = 'No projects found.';
+                        return; 
+                    }
+
+                    // Success: Update count and render data
+                    const actualCount = dataArray.length;
+                    const linesSkipped = totalLinesRead - 1 - EXPECTED_ROW_COUNT;
+                    
+                    let countMessage = `Displaying ${actualCount} Projects`;
+                    let isPerfectCount = actualCount === EXPECTED_ROW_COUNT;
+                    let hasInconsistentRows = dataArray.some(row => row.salvaged);
+
+
+                    // --- Status Messaging ---
+                    if (isPerfectCount) {
+                         countMessage += ` (Exactly ${EXPECTED_ROW_COUNT} rows loaded.)`;
+                         projectCount.classList.add('text-green-600');
+                         projectCount.classList.remove('text-blue-600', 'text-red-600');
+                    } else if (actualCount < EXPECTED_ROW_COUNT) {
+                        countMessage += ` (Expected: ${EXPECTED_ROW_COUNT}. Missing ${EXPECTED_ROW_COUNT - actualCount} rows or data is truncated.)`;
+                        projectCount.classList.add('text-red-600');
+                        projectCount.classList.remove('text-blue-600', 'text-green-600');
+                    } else if (actualCount > EXPECTED_ROW_COUNT) {
+                        countMessage += ` (Expected: ${EXPECTED_ROW_COUNT}. Found ${actualCount} rows. Did the expected count change?)`;
+                        projectCount.classList.add('text-red-600');
+                        projectCount.classList.remove('text-blue-600', 'text-green-600');
+                    }
+                    
+                    if (hasInconsistentRows) {
+                        countMessage += ' **Some rows had inconsistent column counts and were salvaged.**';
+                        projectCount.classList.remove('text-green-600', 'text-blue-600');
+                        projectCount.classList.add('text-red-600');
+                    }
+
+                    projectCount.textContent = countMessage;
+                    statusMessage.style.display = 'none';
+                    dataGrid.innerHTML = dataArray.map(row => createCard(row)).join('');
+                    return; // Success, exit function
+
+                } catch (error) {
+                    lastError = error;
+                    if (attempt < MAX_RETRIES - 1) {
+                        const delay = Math.pow(2, attempt) * 1000; 
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                }
+            }
+            
+            // If all retries fail
+            console.error('Failed to fetch or render CSV data after multiple retries:', lastError);
+            statusMessage.className = 'text-center text-xl font-medium text-red-600 p-4 bg-red-100 rounded-lg shadow';
+            statusMessage.innerHTML = `Error loading data: ${lastError.message}. <br> Please ensure the raw CSV link is correct and accessible.`;
+            projectCount.textContent = 'Failed to load project count.';
+        }
+
+        // Run the main function when the page loads
+        document.addEventListener('DOMContentLoaded', fetchAndRenderData);
+    </script>
+</body>
+</html>
