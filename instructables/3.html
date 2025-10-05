@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CSV Thumbnails Viewer</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; padding:18px;}
+    .controls{display:flex;gap:8px;align-items:center;margin-bottom:12px;}
+    input[type=text]{flex:1;padding:8px;border:1px solid #ddd;border-radius:6px}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:#fff;cursor:pointer}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:6px;border:1px solid #eee;text-align:left;vertical-align:middle}
+    img.thumb{max-width:160px;max-height:120px;object-fit:cover;border-radius:6px}
+    .note{color:#666;font-size:13px;margin-top:8px}
+  </style>
+</head>
+<body>
+  <h1>CSV Thumbnails Viewer</h1>
+  <div class="controls">
+    <input id="csvUrl" type="text" value="https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/instructables/info.csv" />
+    <button id="loadBtn">Load CSV</button>
+    <input id="fileInput" type="file" accept=".csv" />
+  </div>
+  <div class="note">Tip: paste a raw GitHub URL (raw.githubusercontent.com) or a normal GitHub blob URL — the viewer will try to convert it.</div>
+  <div id="tableWrap"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script>
+    const csvUrlInput = document.getElementById('csvUrl');
+    const loadBtn = document.getElementById('loadBtn');
+    const fileInput = document.getElementById('fileInput');
+    const tableWrap = document.getElementById('tableWrap');
+
+    loadBtn.addEventListener('click', ()=> loadFromUrl(csvUrlInput.value.trim()));
+    fileInput.addEventListener('change', e=>{
+      const f = e.target.files[0]; if(!f) return;
+      Papa.parse(f, { header:true, skipEmptyLines:true, complete: (res)=> render(res.data, res.meta.fields) });
+    });
+
+    // Try to fetch and parse CSV from URL
+    async function loadFromUrl(url){
+      if(!url) return alert('Paste a URL or choose a file');
+      // convert standard GitHub blob URL -> raw URL
+      url = convertGitHubUrlToRaw(url);
+      try{
+        const res = await fetch(url);
+        if(!res.ok) throw new Error('Fetch failed: '+res.status);
+        const text = await res.text();
+        const parsed = Papa.parse(text, { header:true, skipEmptyLines:true });
+        render(parsed.data, parsed.meta.fields);
+      }catch(err){
+        alert('Could not load CSV: '+err.message);
+        console.error(err);
+      }
+    }
+
+    function convertGitHubUrlToRaw(url){
+      // if already raw, return
+      if(url.includes('raw.githubusercontent.com')) return url;
+      // if blob URL, convert
+      const ghMatch = url.match(/https?:\/\/github.com\/(.+?)\/(.+?)\/(?:blob|raw)\/(.+)$/);
+      if(ghMatch){
+        const user = ghMatch[1];
+        const repo = ghMatch[2];
+        const path = ghMatch[3];
+        return `https://raw.githubusercontent.com/${user}/${repo}/${path}`;
+      }
+      return url;
+    }
+
+    // Heuristic: detect which columns should be shown as thumbnails
+    function detectImageColumns(fields, rows){
+      const candidates = [];
+      const lowerFields = fields.map(f=> (f||'').toString().toLowerCase());
+      for(let i=0;i<fields.length;i++){
+        const f = lowerFields[i];
+        if(f.includes('img')||f.includes('image')||f.includes('photo')||f.includes('thumb')||f.includes('url')||f.includes('address')||f.includes('ir')) candidates.push(i);
+      }
+      // also inspect first few rows for URLs
+      for(let i=0;i<fields.length;i++){
+        if(candidates.includes(i)) continue;
+        for(let r=0;r<Math.min(5, rows.length); r++){
+          const v = rows[r][fields[i]];
+          if(!v) continue;
+          const s = v.toString().trim();
+          if(isProbableImageUrl(s)) { candidates.push(i); break; }
+        }
+      }
+      return [...new Set(candidates)];
+    }
+
+    function isProbableImageUrl(s){
+      if(!s) return false;
+      // remove surrounding = or quotes
+      s = s.replace(/^=+|=+$/g,'').replace(/^"|"$/g,'');
+      // convert github blob links to raw
+      if(s.includes('github.com') && s.includes('/blob/')) s = convertGitHubUrlToRaw(s);
+      // basic checks
+      const lower = s.toLowerCase();
+      if(lower.startsWith('http') && (lower.endsWith('.png')||lower.endsWith('.jpg')||lower.endsWith('.jpeg')||lower.endsWith('.gif')||lower.endsWith('.webp')||lower.includes('raw.githubusercontent.com')||lower.includes('i.imgur.com'))) return true;
+      // also accept data urls
+      if(lower.startsWith('data:image/')) return true;
+      return false;
+    }
+
+    function normalizeImageUrl(s){
+      if(!s) return '';
+      s = s.toString().trim();
+      // strip leading equals signs or text like "=ir = address:"
+      s = s.replace(/^=+|=+$/g,'');
+      // if the cell contains a label like "address: https://...", try to extract the URL
+      const urlMatch = s.match(/https?:\/\/(\S+)/);
+      if(urlMatch) s = 'https://' + urlMatch[1];
+      // convert github blob to raw
+      if(s.includes('github.com') && s.includes('/blob/')) s = convertGitHubUrlToRaw(s);
+      return s;
+    }
+
+    function render(rows, fields){
+      if(!rows || rows.length===0) { tableWrap.innerHTML = '<div class="note">No rows found in CSV.</div>'; return; }
+      const cols = fields || Object.keys(rows[0]);
+      const imgColsIdx = detectImageColumns(cols, rows);
+
+      const tbl = document.createElement('table');
+      const thead = document.createElement('thead');
+      const thr = document.createElement('tr');
+      cols.forEach((c,i)=>{
+        const th = document.createElement('th');
+        th.textContent = c;
+        if(imgColsIdx.includes(i)) th.textContent += ' (thumb)';
+        thr.appendChild(th);
+      });
+      thead.appendChild(thr); tbl.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      rows.forEach(row=>{
+        const tr = document.createElement('tr');
+        cols.forEach((c,i)=>{
+          const td = document.createElement('td');
+          let v = row[c];
+          if(v==null) v='';
+          const raw = v.toString();
+          if(imgColsIdx.includes(i) && isProbableImageUrl(raw)){
+            const src = normalizeImageUrl(raw);
+            const img = document.createElement('img');
+            img.className='thumb';
+            img.alt = src;
+            img.src = src;
+            img.onerror = function(){ this.style.display='none'; td.textContent = src; }
+            td.appendChild(img);
+          } else if(imgColsIdx.includes(i) && raw.includes('http')){
+            // attempt to extract URL even if not obvious
+            const src = normalizeImageUrl(raw);
+            if(src){ const img = document.createElement('img'); img.className='thumb'; img.src=src; img.onerror=function(){ this.style.display='none'; td.textContent = src; }; td.appendChild(img);} else { td.textContent = raw; }
+          } else {
+            td.textContent = raw;
+          }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+
+      tableWrap.innerHTML='';
+      tableWrap.appendChild(tbl);
+    }
+
+    // auto-load default URL on open
+    (function(){ loadFromUrl(csvUrlInput.value); })();
+  </script>
+</body>
+</html>
