@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSV Thumbnails Viewer</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    img.thumb { max-width: 160px; max-height: 120px; border-radius: 6px; object-fit: cover; }
+  </style>
+</head>
+<body>
+  <h1>CSV Thumbnails Viewer</h1>
+  <div id="tableWrap">Loading...</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script>
+    const csvUrl = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/instructables/info.csv';
+
+    async function loadCSV() {
+      const res = await fetch(csvUrl);
+      const text = await res.text();
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+      renderTable(parsed.data, parsed.meta.fields);
+    }
+
+    function renderTable(rows, fields) {
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const trHead = document.createElement('tr');
+
+      fields.forEach(field => {
+        const th = document.createElement('th');
+        th.textContent = field;
+        trHead.appendChild(th);
+      });
+      thead.appendChild(trHead);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        fields.forEach(field => {
+          const td = document.createElement('td');
+          let value = row[field]?.trim() || '';
+
+          // If cell contains an image link or something like =IMAGE("url")
+          const imageMatch = value.match(/(https?:[^\"]+\.(jpg|jpeg|png|gif|webp))/i);
+          if (imageMatch) {
+            const img = document.createElement('img');
+            img.src = imageMatch[1].replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+            img.className = 'thumb';
+            td.appendChild(img);
+          } else {
+            td.textContent = value;
+          }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      document.getElementById('tableWrap').innerHTML = '';
+      document.getElementById('tableWrap').appendChild(table);
+    }
+
+    loadCSV();
+  </script>
+</body>
+</html>
