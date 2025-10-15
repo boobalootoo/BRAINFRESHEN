@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Print Layout Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none; /* Prevents pull-to-refresh on mobile */
+        }
+        
+        /* --- Canvas & Ruler Styling --- */
+        #canvas {
+            background-color: #ffffff;
+            /* Create a 1cm grid background */
+            background-image:
+                linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+                linear-gradient(to right, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+            background-size: 37.8px 37.8px; /* Approx 1cm at 96 DPI */
+            border: 1px solid #ccc;
+        }
+
+        .draggable-image {
+            position: absolute;
+            cursor: move;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        
+        .draggable-image:hover, .draggable-image.selected {
+            border-color: #3b82f6; /* blue-500 */
+            z-index: 10;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            width: 20px;
+            height: 20px;
+            background-color: #ef4444; /* red-500 */
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            border: 1px solid white;
+            z-index: 12;
+        }
+        
+        .draggable-image:hover .delete-btn {
+            opacity: 1;
+        }
+
+        /* --- New Resize Handle Styles --- */
+        .resize-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #3b82f6;
+            border: 2px solid white;
+            border-radius: 3px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 11;
+        }
+
+        .draggable-image:hover .resize-handle,
+        .draggable-image.selected .resize-handle {
+            opacity: 1;
+        }
+
+        .br-handle { /* bottom-right */
+            bottom: -7px;
+            right: -7px;
+            cursor: se-resize;
+        }
+
+        #ruler-rotate-handle {
+            cursor: nwse-resize;
+        }
+
+        .ruler-markings {
+            /* Create cm and mm markings on the ruler */
+            background-image: repeating-linear-gradient(to right,
+                #6b7280,
+                #6b7280 1px,
+                transparent 1px,
+                transparent 3.78px /* ~1mm */
+            ),
+            repeating-linear-gradient(to right,
+                #1f2937,
+                #1f2937 2px,
+                transparent 2px,
+                transparent 37.8px /* ~1cm */
+            );
+        }
+
+        /* --- Print-specific styles --- */
+        @media print {
+            /* Hide UI elements when printing */
+            body > *:not(#canvas-container) {
+                display: none;
+            }
+            #canvas-container, #canvas, #canvas * {
+                visibility: visible;
+                display: block;
+            }
+            #canvas {
+                position: absolute;
+                left: 0;
+                top: 0;
+                margin: 0;
+                padding: 0;
+                border: none !important;
+                box-shadow: none !important;
+                background-image: none !important; /* Hide grid on print */
+            }
+            /* Ensure no browser-added margins */
+            @page {
+                size: A4 portrait;
+                margin: 0;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- Toolbar -->
+    <div id="toolbar" class="fixed top-0 left-0 w-full bg-white shadow-lg p-3 flex items-center space-x-4 z-30">
+        <h1 class="text-xl font-bold text-gray-800">Print Layout Tool</h1>
+        <label for="imageUpload" class="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors shadow">
+            Upload Images
+        </label>
+        <input type="file" id="imageUpload" multiple accept="image/*" class="hidden">
+        <button id="printBtn" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors shadow">
+            Print Canvas
+        </button>
+        <p class="text-gray-600 text-sm ml-auto hidden md:block">Canvas is A4 (21cm x 29.7cm). Set printer scale to 100%.</p>
+    </div>
+
+    <!-- Main Content Area -->
+    <div id="canvas-container" class="pt-20 pb-8 flex justify-center items-start">
+        <!-- The Printable Canvas -->
+        <div id="canvas" class="bg-white shadow-2xl relative overflow-hidden">
+            <!-- Uploaded images will be appended here -->
+        </div>
+    </div>
+
+    <!-- Draggable and Rotatable Ruler -->
+    <div id="ruler" class="absolute top-24 left-10 h-10 bg-yellow-300/80 backdrop-blur-sm border-2 border-gray-600 shadow-lg cursor-move z-20 select-none flex items-center justify-center rounded" style="width: 756px;"> <!-- 20cm ruler -->
+        <div class="ruler-markings w-full h-full opacity-80"></div>
+        <div id="ruler-rotate-handle" class="absolute -right-3 -top-3 w-6 h-6 bg-red-500 rounded-full border-2 border-white shadow-md"></div>
+        <span class="absolute text-sm font-mono select-none text-gray-800 font-bold">20cm Ruler</span>
+    </div>
+
+    <script>
+        const PIXELS_PER_CM = 37.7952755906; // Standard for 96 DPI screens
+
+        const canvas = document.getElementById('canvas');
+        const imageUpload = document.getElementById('imageUpload');
+        const printBtn = document.getElementById('printBtn');
+        const ruler = document.getElementById('ruler');
+        const rulerRotateHandle = document.getElementById('ruler-rotate-handle');
+
+        // Set canvas size to A4
+        canvas.style.width = `${21 * PIXELS_PER_CM}px`;
+        canvas.style.height = `${29.7 * PIXELS_PER_CM}px`;
+
+        // --- Selection Logic ---
+        let selectedImage = null;
+
+        function selectImage(element) {
+            if (selectedImage && selectedImage !== element) {
+                selectedImage.classList.remove('selected');
+            }
+            element.classList.add('selected');
+            selectedImage = element;
+        }
+
+        canvas.addEventListener('click', (e) => {
+            if (e.target === canvas && selectedImage) {
+                selectedImage.classList.remove('selected');
+                selectedImage = null;
+            }
+        });
+
+        // --- Image Upload and Handling ---
+        imageUpload.addEventListener('change', (e) => {
+            for (const file of e.target.files) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    createImageOnCanvas(event.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+            e.target.value = ''; // Reset input
+        });
+        
+        function createImageOnCanvas(src) {
+            const container = document.createElement('div');
+            container.className = 'draggable-image';
+            
+            const img = document.createElement('img');
+            img.src = src;
+            img.style.width = `${5 * PIXELS_PER_CM}px`; // Default width of 5cm
+            img.style.userSelect = 'none';
+            img.style.display = 'block'; // Prevents small gap below image
+
+            const deleteBtn = document.createElement('div');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.innerHTML = '&times;';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                container.remove();
+            });
+
+            const resizeHandle = document.createElement('div');
+            resizeHandle.className = 'resize-handle br-handle';
+
+            container.appendChild(img);
+            container.appendChild(deleteBtn);
+            container.appendChild(resizeHandle);
+            canvas.appendChild(container);
+
+            container.addEventListener('mousedown', (e) => {
+                selectImage(container);
+            });
+
+            makeDraggable(container);
+            makeResizable(container, img);
+        }
+
+        // --- Resizing Logic ---
+        function makeResizable(element, image) {
+            const handle = element.querySelector('.resize-handle');
+            let originalWidth, originalHeight, originalMouseX, aspectRatio;
+
+            handle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                originalWidth = parseFloat(getComputedStyle(image, null).getPropertyValue('width').replace('px', ''));
+                originalHeight = parseFloat(getComputedStyle(image, null).getPropertyValue('height').replace('px', ''));
+                aspectRatio = originalWidth / originalHeight;
+                originalMouseX = e.clientX;
+
+                document.addEventListener('mousemove', resize);
+                document.addEventListener('mouseup', stopResize, { once: true });
+            });
+
+            function resize(e) {
+                const width = originalWidth + (e.clientX - originalMouseX);
+                if (width > 20) { // Minimum size of ~0.5cm
+                    image.style.width = width + 'px';
+                    // Height will adjust automatically due to aspect ratio
+                }
+            }
+
+            function stopResize() {
+                document.removeEventListener('mousemove', resize);
+            }
+        }
+
+        // --- Generic Dragging Logic ---
+        function makeDraggable(element) {
+            let offsetX, offsetY, isDragging = false;
+
+            element.addEventListener('mousedown', (e) => {
+                if (e.target.classList.contains('delete-btn') || e.target.classList.contains('resize-handle')) return;
+                isDragging = true;
+                
+                document.querySelectorAll('.draggable-image').forEach(el => el.style.zIndex = '1');
+                element.style.zIndex = '10';
+
+                offsetX = e.clientX - element.offsetLeft;
+                offsetY = e.clientY - element.offsetTop;
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp, { once: true });
+                e.preventDefault();
+            });
+
+            function onMouseMove(e) {
+                if (!isDragging) return;
+                let newX = e.clientX - offsetX;
+                let newY = e.clientY - offsetY;
+                
+                const parent = element.offsetParent;
+                const elemWidth = element.offsetWidth;
+                const elemHeight = element.offsetHeight;
+
+                const minX = 0;
+                const minY = 0;
+                const maxX = parent.offsetWidth - elemWidth;
+                const maxY = parent.offsetHeight - elemHeight;
+
+                element.style.left = `${Math.max(minX, Math.min(newX, maxX))}px`;
+                element.style.top = `${Math.max(minY, Math.min(newY, maxY))}px`;
+            }
+
+            function onMouseUp() {
+                isDragging = false;
+                document.removeEventListener('mousemove', onMouseMove);
+            }
+        }
+        
+        // Make the ruler draggable
+        makeDraggable(ruler);
+
+        // --- Ruler Rotation Logic ---
+        let isRotating = false;
+        rulerRotateHandle.addEventListener('mousedown', (e) => {
+            isRotating = true;
+            document.addEventListener('mousemove', onRulerRotate);
+            document.addEventListener('mouseup', onRulerRotateEnd, { once: true });
+            e.stopPropagation();
+        });
+
+        function onRulerRotate(e) {
+            if (!isRotating) return;
+            const rect = ruler.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+            ruler.style.transform = `rotate(${angle}deg)`;
+        }
+
+        function onRulerRotateEnd() {
+            isRotating = false;
+            document.removeEventListener('mousemove', onRulerRotate);
+        }
+
+        // --- Print ---
+        printBtn.addEventListener('click', () => {
+            if(selectedImage) {
+                selectedImage.classList.remove('selected');
+                selectedImage = null;
+            }
+            window.print();
+        });
+
+    </script>
+</body>
+</html>
+
