@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alphabet Soundboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Simple transition for button press */
+        .letter-button {
+            transition: transform 0.1s ease, background-color 0.1s ease;
+        }
+        .letter-button:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-2xl">
+        <!-- Header Section -->
+        <div>
+            <h1 class="text-3xl font-bold text-gray-800 text-center">Alphabet Pronunciations</h1>
+            <p class="text-gray-500 text-center mt-2">Click any letter to hear its sound.</p>
+        </div>
+
+        <!-- Alphabet Buttons Grid -->
+        <div id="alphabet-grid" class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-4 mt-8">
+            <!-- Buttons will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <script>
+        const alphabetGrid = document.getElementById('alphabet-grid');
+        const alphabet = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+        // Base URL for the raw audio files on GitHub
+        const baseUrl = 'https://raw.githubusercontent.com/boobalootoo/BRAINFRESHEN/main/shapeofsound/pronunciations/';
+
+        // Create a button for each letter
+        alphabet.forEach(letter => {
+            const button = document.createElement('button');
+            button.textContent = letter.toUpperCase();
+            button.className = 'letter-button text-2xl font-bold p-4 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50';
+            
+            // Add click event listener to play the sound
+            button.addEventListener('click', () => {
+                const audioUrl = `${baseUrl}${letter}.m4a`;
+                const audio = new Audio(audioUrl);
+                
+                // Handle potential loading errors
+                audio.addEventListener('error', () => {
+                    console.error(`Could not load audio for letter: ${letter}`);
+                    alert(`Sorry, the sound for the letter "${letter.toUpperCase()}" could not be found.`);
+                });
+
+                audio.play();
+            });
+
+            alphabetGrid.appendChild(button);
+        });
+    </script>
+</body>
+</html>
