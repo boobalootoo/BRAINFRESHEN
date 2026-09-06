@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi DJ Turntables & Playlist Player</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- YouTube API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            color: #f3f4f6;
+            min-height: 100vh;
+        }
+
+        /* --- Normal Mode Layout --- */
+        .dj-stage {
+            position: relative;
+            width: 100%;
+            transition: all 0.4s ease;
+            background-color: #111827; 
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background-color: #000;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            margin: 0 auto;
+        }
+        .video-container iframe, .video-container > div.api-target {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+
+        /* --- DJ Mode Realistic Turntable Transformations --- */
+        .dj-mode-stage {
+            aspect-ratio: 4 / 3;
+            background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+            box-shadow: inset 0 0 20px rgba(0,0,0,1);
+            border: 2px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .dj-mode-active.video-container {
+            position: absolute;
+            top: 50%;
+            left: 50%; 
+            transform: translate(-50%, -50%);
+            width: 80%;
+            max-width: 450px;
+            aspect-ratio: 1 / 1;
+            border-radius: 50%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.9), inset 0 0 10px rgba(255,255,255,0.1);
+            background: #000;
+            z-index: 10; /* Ensures turntable is above waveform circular */
+        }
+        
+        /* Mask the video in DJ mode without destroying the iframe (prevents ad restarts) */
+        .dj-mode-active iframe, .dj-mode-active div.api-target {
+            width: 300% !important; /* Scale up immensely to push controls out of the circle clip */
+            height: 300% !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            pointer-events: none; /* Block YouTube native UI completely */
+            opacity: 0; /* Fully hide video to show vinyl label instead */
+        }
+
+        /* --- Realistic Vinyl UI --- */
+        .turntable-overlay {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: repeating-radial-gradient(circle at 50% 50%, #111 0px, #1a1a1a 2px, #0a0a0a 4px);
+            z-index: 10;
+            touch-action: none; /* Prevents screen scrolling while scratching */
+            box-shadow: inset 0 0 20px #000;
+            will-change: transform;
+        }
+        
+        .tool-hand .turntable-overlay { cursor: grab; }
+        .tool-hand .turntable-overlay:active { cursor: grabbing; }
+        .tool-crayon .turntable-overlay { cursor: crosshair; }
+        
+        .turntable-label {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 35%; height: 35%;
+            border-radius: 50%;
+            background-color: #222;
+            background-size: cover;
+            background-position: center;
+            border: 4px solid #000;
+            pointer-events: none;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .turntable-label::after {
+            content: ''; width: 12px; height: 12px;
+            background: radial-gradient(circle, #ddd, #666);
+            border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+        /* Visual scratch needle on the label */
+        .scratch-needle {
+            position: absolute; top: 0; left: 50%; width: 2px; height: 10px;
+            background-color: #ef4444; transform: translateX(-50%);
+            box-shadow: 0 0 5px #ef4444;
+        }
+
+        /* --- Tonearm Design --- */
+        .tonearm-assembly {
+            position: absolute;
+            top: 10%; right: 5%;
+            width: 15%; height: 70%;
+            z-index: 30;
+            transform-origin: 50% 15%;
+            transition: transform 0.3s ease-in-out;
+            cursor: pointer;
+        }
+        .tonearm-assembly:hover .tonearm-wand { filter: brightness(1.2); }
+        .tonearm-pivot {
+            position: absolute;
+            top: 10%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px; height: 60px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #888, #222);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.8);
+        }
+        .tonearm-wand {
+            position: absolute;
+            top: 15%; left: 50%;
+            transform: translateX(-50%);
+            width: 8px; height: 75%;
+            background: linear-gradient(to right, #ccc, #fff, #999);
+            border-radius: 4px;
+            box-shadow: 2px 5px 10px rgba(0,0,0,0.6);
+            transition: filter 0.2s;
+        }
+        .tonearm-headshell {
+            position: absolute;
+            bottom: 5%; left: 50%;
+            transform: translateX(-50%) rotate(25deg);
+            width: 20px; height: 35px;
+            background: #111; border-radius: 4px; border-top: 2px solid #555;
+            box-shadow: 2px 5px 10px rgba(0,0,0,0.8);
+        }
+
+        /* --- Pitch & Volume Sliders (DJ Mode) --- */
+        .slider-container {
+            position: absolute;
+            bottom: 10%;
+            width: 40px; height: 40%;
+            background: #0a0a0a; border: 2px solid #222; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: inset 0 0 10px #000; z-index: 15;
+        }
+        .pitch-container { right: 5%; }
+        .vol-container { left: 5%; }
+
+        .vertical-slider {
+            -webkit-appearance: none;
+            width: 140px; height: 4px;
+            background: #333; outline: none;
+            transform: rotate(-90deg); 
+        }
+        .vertical-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 25px; height: 15px;
+            background: linear-gradient(to bottom, #eee, #999);
+            border: 1px solid #111; border-radius: 2px;
+            cursor: pointer; box-shadow: 0 0 5px rgba(0,0,0,1);
+        }
+
+        /* --- Waveforms --- */
+        .waveform-linear {
+            width: 100%; height: 60px;
+            background: #1f2937; border-radius: 0.25rem; touch-action: none;
+        }
+        .tool-hand .waveform-linear { cursor: pointer; }
+        .tool-crayon .waveform-linear { cursor: crosshair; }
+        
+        .waveform-circular {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5;
+            pointer-events: none; /* Let clicks pass through to the turntable overlay if necessary */
+        }
+
+        /* --- Crayon Palette --- */
+        .tool-btn {
+            width: 28px; height: 28px; border-radius: 50%;
+            cursor: pointer; transition: transform 0.1s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .tool-btn:hover { transform: scale(1.1); }
+        .tool-btn.active { box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor; }
+        .rubber-tool { border-radius: 4px; background: #222; border: 1px solid #555; }
+        .rubber-tool.active { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #222; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #374151; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #6b7280; border-radius: 4px; }
+
+        /* --- Quickdeck Mode --- */
+        body.quickdeck-active .hide-in-quickdeck { display: none !important; }
+        body.quickdeck-active #players-grid { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
+        body.quickdeck-active .player-instance { padding: 1rem; border: none; background: transparent; box-shadow: none; }
+    </style>
+</head>
+<body class="flex flex-col items-center p-4 sm:p-6 lg:p-8 transition-colors duration-500">
+
+    <!-- Global Header -->
+    <div class="w-full max-w-[1800px] flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">DJ Vinyl Station</h1>
+            <p class="text-gray-400 text-sm mt-1">Realistic turntables. Continuous play. Precise Scratching.</p>
+        </div>
+        <div class="flex flex-wrap gap-3 items-center">
+            <button id="quickdeckBtn" class="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex items-center gap-2">
+                ⚡ Quickdeck
+            </button>
+            <button id="infoBtn" class="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex items-center gap-2">
+                ℹ️ Guide
+            </button>
+            <label class="flex items-center gap-2 text-xs font-semibold text-gray-300 bg-gray-800 p-2 rounded-lg hide-in-quickdeck cursor-pointer" title="Constantly buffers the last 30s of your mic so you never miss a moment!">
+                <input type="checkbox" id="preBufferToggle" class="accent-red-500 w-4 h-4">
+                30s Pre-buffer Mic
+            </label>
+            <button id="micRecordBtn" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex items-center gap-2 hide-in-quickdeck">
+                🎙️ Record Mic
+            </button>
+            <button id="addPlayerBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex items-center gap-2 hide-in-quickdeck">
+                ➕ Add Deck
+            </button>
+        </div>
+    </div>
+
+    <!-- Multi Player Grid -->
+    <div id="players-grid" class="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6 w-full max-w-[1800px] transition-all duration-300">
+        <!-- Dynamic containers inserted here -->
+    </div>
+
+    <!-- ==========================================
+         TEMPLATE: Single Player Deck
+         ========================================== -->
+    <template id="player-template">
+        <div class="player-instance w-full bg-gray-800 p-5 rounded-2xl shadow-2xl flex flex-col h-full border border-gray-700 transition-all tool-hand">
+            
+            <!-- Deck Header -->
+            <div class="flex justify-between items-center mb-4 hide-in-quickdeck">
+                <h2 class="text-2xl font-bold text-white player-name">Deck</h2>
+                <div class="flex gap-2 items-center">
+                    <!-- Autoplay & Loop Toggles -->
+                    <label class="flex items-center gap-1 text-xs text-gray-300 cursor-pointer mr-2">
+                        <input type="checkbox" class="loop-toggle accent-indigo-500" checked> Loop
+                    </label>
+                    <label class="flex items-center gap-1 text-xs text-gray-300 cursor-pointer mr-2">
+                        <input type="checkbox" class="autoplay-toggle accent-indigo-500" checked> Autoplay
+                    </label>
+
+                    <button class="dj-mode-toggle text-xs font-bold text-white bg-purple-600 px-3 py-1.5 rounded-md hover:bg-purple-700 transition shadow">🎧 Enter DJ Mode</button>
+                    <button class="delete-player-btn text-xs font-semibold text-red-500 px-2 py-1 bg-red-900/30 hover:bg-red-900/60 rounded-md transition" title="Remove Player">✕</button>
+                </div>
+            </div>
+
+            <!-- PLAYER SECTION -->
+            <div class="video-section hidden mb-5 bg-gray-900 rounded-xl overflow-hidden shadow-inner flex-shrink-0 flex flex-col relative">
+                
+                <div class="p-3 flex justify-between items-center bg-gray-950 text-white z-20 relative border-b border-gray-800 hide-in-quickdeck">
+                    <span class="video-display-title font-bold truncate pr-4 text-sm text-gray-200"></span>
+                    <button class="close-video-btn text-gray-500 hover:text-white transition focus:outline-none">✕</button>
+                </div>
+
+                <!-- STAGE (Normal / DJ layout) -->
+                <div class="dj-stage p-4">
+                    <!-- Circular Waveform Canvas -->
+                    <canvas class="waveform-circular hidden"></canvas>
+
+                    <!-- Left Volume Slider (Visible only in DJ Mode) -->
+                    <div class="slider-container vol-container hidden">
+                        <input type="range" class="vertical-slider dj-vol-slider" min="0" max="100" value="100" title="Deck Volume">
+                    </div>
+
+                    <!-- The Video / Turntable Container -->
+                    <div class="video-embed-container video-container relative group">
+                        <!-- Turntable Overlay (shown in DJ mode) -->
+                        <div class="turntable-overlay hidden group-[.dj-mode-active]:block">
+                            <!-- Dynamic Thumbnail Label -->
+                            <div class="turntable-label">
+                                <div class="scratch-needle"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Realistic Tonearm (Visible only in DJ Mode) -->
+                    <div class="tonearm-assembly hidden" title="Click to Play/Pause">
+                        <div class="tonearm-pivot"></div>
+                        <div class="tonearm-wand"></div>
+                        <div class="tonearm-headshell"></div>
+                    </div>
+
+                    <!-- Right Pitch Control (Visible only in DJ Mode) -->
+                    <div class="slider-container pitch-container hidden">
+                        <input type="range" class="vertical-slider pitch-slider" min="0.25" max="2.0" step="0.25" value="1.0" title="Playback Speed">
+                    </div>
+                </div>
+
+                <!-- Linear Waveform (Visible in Normal Mode) -->
+                <div class="px-4 pb-2 linear-waveform-container hide-in-quickdeck">
+                    <canvas class="waveform-linear"></canvas>
+                </div>
+
+                <!-- Deck Controls -->
+                <div class="bg-gray-950 p-4 flex flex-col gap-3 border-t border-gray-800">
+                    <!-- Transport & Volume -->
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        
+                        <div class="flex gap-3 items-center crayon-palette bg-gray-800 p-2 rounded-lg hide-in-quickdeck">
+                            <div class="tool-btn bg-gray-600 text-gray-400 active" data-color="hand" title="Hand Tool (Scrub/Seek)">🖐</div>
+                            <div class="w-px h-6 bg-gray-600 mx-1"></div>
+                            <div class="tool-btn bg-red-500 text-red-500" data-color="#ef4444" title="Red Marker"></div>
+                            <div class="tool-btn bg-blue-500 text-blue-500" data-color="#3b82f6" title="Blue Marker"></div>
+                            <div class="tool-btn bg-green-500 text-green-500" data-color="#10b981" title="Green Marker"></div>
+                            <div class="tool-btn bg-yellow-400 text-yellow-400" data-color="#facc15" title="Yellow Marker"></div>
+                            <div class="w-px h-6 bg-gray-600 mx-1"></div>
+                            <div class="tool-btn rubber-tool text-white" data-color="rubber" title="Eraser">🗑</div>
+                        </div>
+
+                        <div class="flex items-center gap-4 w-full sm:w-auto justify-end">
+                            <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold w-24 hide-in-quickdeck">
+                                <span title="Volume">VOL</span>
+                                <input type="range" min="0" max="100" value="100" class="vol-slider w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                            </div>
+                            <span class="pitch-display text-xs font-mono text-emerald-400 hidden">SPD: 1.0x</span>
+                            <div class="text-xs font-mono text-gray-500 time-display hide-in-quickdeck">0:00 / 0:00</div>
+                            <button class="btn-play-pause w-12 h-12 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full font-bold transition shadow-lg flex items-center justify-center hide-in-quickdeck">▶</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Video Form -->
+            <div class="mb-5 p-4 bg-gray-900 rounded-xl border border-gray-700 hide-in-quickdeck">
+                <h3 class="text-xs font-bold mb-3 text-gray-400 uppercase tracking-wider">Load Track</h3>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input type="text" class="video-title-input w-full sm:w-1/3 p-2 bg-gray-800 border border-gray-600 rounded text-sm text-white focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-500" placeholder="Auto-title if blank">
+                    <input type="url" class="video-url-input w-full sm:w-2/3 p-2 bg-gray-800 border border-gray-600 rounded text-sm text-white focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-500" placeholder="Paste YouTube URL">
+                    <button class="add-btn bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-5 rounded transition text-sm flex-shrink-0">Load</button>
+                </div>
+            </div>
+
+            <!-- Playlist Area -->
+            <div class="flex flex-col flex-grow min-h-[200px] hide-in-quickdeck">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider">Crate (<span class="playlist-count">0</span>)</h3>
+                    <div class="flex gap-2">
+                        <button class="export-btn text-[10px] font-bold bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded transition">Export</button>
+                        <button class="import-btn text-[10px] font-bold bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded transition">Import</button>
+                        <input type="file" class="import-input hidden" accept=".json">
+                    </div>
+                </div>
+                <div class="playlist-container custom-scrollbar bg-gray-900 border border-gray-700 rounded-xl divide-y divide-gray-800 flex-grow max-h-[300px] overflow-y-auto">
+                    <!-- Items appended here -->
+                </div>
+            </div>
+            
+            <div class="message-box mt-3 p-2 bg-yellow-900/50 border border-yellow-700 text-yellow-400 text-xs rounded-lg hidden transition-opacity text-center"></div>
+        </div>
+    </template>
+
+    <!-- Instructions Modal -->
+    <div id="infoModal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+        <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 max-w-2xl w-full text-white shadow-2xl">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                <h2 class="text-2xl font-bold text-indigo-400">DJ Station Guide</h2>
+                <button id="closeInfoBtn" class="text-gray-400 hover:text-white text-xl">✕</button>
+            </div>
+            <div class="space-y-4 text-sm text-gray-300 max-h-[70vh] overflow-y-auto custom-scrollbar pr-2">
+                <div>
+                    <h3 class="font-bold text-white text-lg text-amber-400">⚡ Quickdeck Mode</h3>
+                    <p>Clicking Quickdeck instantly switches all active decks into DJ Mode and hides all playlists, crates, and URLs to give you a clean, focused turntable mixing layout with embedded volume and speed sliders.</p>
+                </div>
+                <div>
+                    <h3 class="font-bold text-white text-lg">🎧 Modes & Playback</h3>
+                    <p><strong>Normal Mode:</strong> View standard YouTube player. Clicking the linear waveform below seeks through the video.</p>
+                    <p><strong>DJ Mode:</strong> The video transforms into a physical turntable. The Tonearm will move automatically. <strong>Clicking the tonearm plays/pauses.</strong></p>
+                </div>
+                <div>
+                    <h3 class="font-bold text-white text-lg">🖐️ The Hand Tool (Scratch & Seek)</h3>
+                    <p>Select the Hand tool. In DJ mode, clicking anywhere on the vinyl record instantly <strong>pauses playback and locks onto your cursor</strong>. Keep holding and dragging in a circle to silently scrub relative to your movement. Once you let go, it will <strong>automatically resume playing</strong> (if it was playing before).</p>
+                </div>
+                <div>
+                    <h3 class="font-bold text-white text-lg">🖍️ Crayon Markers (Hot Cues)</h3>
+                    <p>Select a colored crayon. Click anywhere on the waveform ring (DJ mode) or linear waveform (Normal mode) to draw a marker. Switch back to the Hand tool and click those markers later to instantly jump (Hot Cue) to that point!</p>
+                </div>
+                <div>
+                    <h3 class="font-bold text-white text-lg">🎙️ Mic Recording Buffer</h3>
+                    <p>Tick the "30s Pre-buffer Mic" checkbox to make your browser continuously record the last 30 seconds of your microphone audio in the background. When you click "Record Mic", it captures that perfect moment leading up to hitting the button. Downloaded files automatically adopt the active YouTube IDs in their filename!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global YouTube API Ready Tracker ---
+        let isYouTubeReady = false;
+        window.onYouTubeIframeAPIReady = function() { isYouTubeReady = true; };
+
+        // --- Global Quickdeck Toggle ---
+        let isQuickdeck = false;
+        document.getElementById('quickdeckBtn').addEventListener('click', () => {
+            isQuickdeck = !isQuickdeck;
+            if(isQuickdeck) {
+                document.body.classList.add('quickdeck-active');
+                document.getElementById('quickdeckBtn').classList.replace('bg-amber-500', 'bg-red-600');
+                document.getElementById('quickdeckBtn').innerHTML = '❌ Exit Quickdeck';
+                
+                // Force all instances into DJ Mode if they aren't already
+                PlayerInstances.forEach(p => { if (!p.isDjMode) p.toggleDjMode(true); });
+            } else {
+                document.body.classList.remove('quickdeck-active');
+                document.getElementById('quickdeckBtn').classList.replace('bg-red-600', 'bg-amber-500');
+                document.getElementById('quickdeckBtn').innerHTML = '⚡ Quickdeck';
+            }
+        });
+
+        // --- Microphone Recording System w/ Pre-Buffer ---
+        const MicRecorder = {
+            stream: null,
+            recorder: null,
+            chunks: [],
+            isRecording: false,
+            isBuffering: false,
+
+            async toggleBuffer(enable) {
+                if (enable) {
+                    try {
+                        this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        this.recorder = new MediaRecorder(this.stream);
+                        this.chunks = [];
+                        this.recorder.ondataavailable = e => {
+                            if (e.data.size > 0) this.chunks.push(e.data);
+                            // If not actively recording to file, only keep last 30 seconds
+                            if (!this.isRecording && this.chunks.length > 30) {
+                                this.chunks.shift();
+                            }
+                        };
+                        this.recorder.start(1000); // 1-second timeslices
+                        this.isBuffering = true;
+                    } catch(err) {
+                        alert("Microphone access denied.");
+                        document.getElementById('preBufferToggle').checked = false;
+                    }
+                } else {
+                    if (this.recorder) this.recorder.stop();
+                    if (this.stream) this.stream.getTracks().forEach(t => t.stop());
+                    this.stream = null;
+                    this.recorder = null;
+                    this.isBuffering = false;
+                    this.isRecording = false;
+                    this.chunks = [];
+                    
+                    const btn = document.getElementById('micRecordBtn');
+                    btn.innerHTML = '🎙️ Record Mic';
+                    btn.classList.remove('bg-red-800', 'animate-pulse');
+                    btn.classList.add('bg-red-500');
+                }
+            },
+
+            async toggleRecord() {
+                const btn = document.getElementById('micRecordBtn');
+                
+                // Start a fresh recording if buffer wasn't enabled
+                if (!this.isBuffering && !this.isRecording) {
+                    try {
+                        this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        this.recorder = new MediaRecorder(this.stream);
+                        this.chunks = [];
+                        this.recorder.ondataavailable = e => { if (e.data.size > 0) this.chunks.push(e.data); };
+                        this.recorder.start(1000);
+                        this.isRecording = true;
+                        
+                        btn.innerHTML = '🛑 Stop & Save';
+                        btn.classList.remove('bg-red-500');
+                        btn.classList.add('bg-red-800', 'animate-pulse');
+                    } catch (err) { alert("Microphone access denied."); }
+                    return;
+                }
+
+                if (this.isRecording) {
+                    // Stop & Save
+                    this.isRecording = false; // Stop the shift() logic
+                    if (this.recorder && this.recorder.state === "recording") this.recorder.requestData(); // Get latest chunk
+                    
+                    setTimeout(() => {
+                        const blob = new Blob(this.chunks, { type: 'audio/webm' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; 
+                        
+                        // Use active YT IDs as filename, separated by - (filesystems block true slashes)
+                        const ids = PlayerInstances.map(p => p.currentVideoIndex >= 0 ? p.playlistData[p.currentVideoIndex].id : null).filter(Boolean);
+                        const filename = ids.length > 0 ? ids.join('-') + '.webm' : `DJ_Mic_Recording_${Date.now()}.webm`;
+                        a.download = filename;
+                        
+                        a.click();
+                        
+                        // Cleanup
+                        if (document.getElementById('preBufferToggle').checked) {
+                            this.chunks = []; // Reset chunks and start a fresh buffer window
+                        } else {
+                            this.toggleBuffer(false); // Kill entirely
+                        }
+                        
+                        btn.innerHTML = '🎙️ Record Mic';
+                        btn.classList.remove('bg-red-800', 'animate-pulse');
+                        btn.classList.add('bg-red-500');
+                    }, 200);
+
+                } else {
+                    // Was buffering, now transition to Record Mode
+                    this.isRecording = true; 
+                    btn.innerHTML = '🛑 Stop & Save';
+                    btn.classList.remove('bg-red-500');
+                    btn.classList.add('bg-red-800', 'animate-pulse');
+                }
+            }
+        };
+
+        // --- Global Helper Functions ---
+        function extractYoutubeId(url) {
+            const pattern = /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([^&\n?#]+)/i;
+            const match = url.match(pattern);
+            return (match && match[1] && match[1].length === 11) ? match[1] : null;
+        }
+
+        async function fetchYoutubeTitle(id) {
+            try {
+                const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`);
+                const data = await res.json();
+                return data.title || null;
+            } catch (e) { return null; }
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "0:00";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        const PlayerInstances = [];
+
+        // --- Class Definition for a Player Instance ---
+        class PlaylistPlayer {
+            constructor(containerId, storageKey, playerName) {
+                this.containerParent = document.getElementById(containerId);
+                this.storageKey = storageKey;
+                this.playlistData = [];
+                this.currentVideoIndex = -1;
+                
+                // Audio & DJ State
+                this.ytPlayer = null; 
+                this.isDjMode = false;
+                this.playbackState = { currentTime: 0, duration: 1, playing: false };
+                this.pollInterval = null;
+                this.lastPollTime = Date.now();
+                
+                // Toggles
+                this.isLoopEnabled = true;
+                this.isAutoplayEnabled = true;
+
+                // Waveform & Markers
+                this.activeTool = 'hand'; 
+                this.markers = []; 
+                this.waveformAmplitudes = Array.from({length: 120}, () => Math.pow(Math.random(), 2) * 0.8 + 0.2); 
+
+                // Turntable interaction
+                this.isDragging = false;
+                this.lastAngle = null;
+                this.lastSeekTime = 0;
+                this.wasPlayingBeforeDrag = false;
+                
+                // Used to render continuous spinning without altering track position
+                this.visualRotation = 0; 
+
+                // Create Wrapper and Clone Template
+                this.container = document.createElement('div');
+                this.containerParent.appendChild(this.container);
+                const template = document.getElementById('player-template').content.cloneNode(true);
+                this.container.appendChild(template);
+
+                // Bind DOM Elements
+                this.els = {
+                    playerInstance: this.container.querySelector('.player-instance'),
+                    nameHeader: this.container.querySelector('.player-name'),
+                    videoSection: this.container.querySelector('.video-section'),
+                    videoDisplayTitle: this.container.querySelector('.video-display-title'),
+                    closeVideoBtn: this.container.querySelector('.close-video-btn'),
+                    embedContainer: this.container.querySelector('.video-embed-container'),
+                    titleInput: this.container.querySelector('.video-title-input'),
+                    urlInput: this.container.querySelector('.video-url-input'),
+                    addBtn: this.container.querySelector('.add-btn'),
+                    playlistContainer: this.container.querySelector('.playlist-container'),
+                    playlistCount: this.container.querySelector('.playlist-count'),
+                    messageBox: this.container.querySelector('.message-box'),
+                    deleteBtn: this.container.querySelector('.delete-player-btn'),
+                    
+                    // Toggles
+                    loopToggle: this.container.querySelector('.loop-toggle'),
+                    autoplayToggle: this.container.querySelector('.autoplay-toggle'),
+
+                    exportBtn: this.container.querySelector('.export-btn'),
+                    importBtn: this.container.querySelector('.import-btn'),
+                    importInput: this.container.querySelector('.import-input'),
+
+                    btnPlayPause: this.container.querySelector('.btn-play-pause'),
+                    volSlider: this.container.querySelector('.vol-slider'),
+                    djVolSlider: this.container.querySelector('.dj-vol-slider'),
+                    volContainer: this.container.querySelector('.vol-container'),
+                    timeDisplay: this.container.querySelector('.time-display'),
+                    
+                    djToggle: this.container.querySelector('.dj-mode-toggle'),
+                    djStage: this.container.querySelector('.dj-stage'),
+                    turntable: this.container.querySelector('.turntable-overlay'),
+                    turntableLabel: this.container.querySelector('.turntable-label'),
+                    tonearmAssembly: this.container.querySelector('.tonearm-assembly'),
+                    pitchContainer: this.container.querySelector('.pitch-container'),
+                    pitchSlider: this.container.querySelector('.pitch-slider'),
+                    pitchDisplay: this.container.querySelector('.pitch-display'),
+
+                    canvasLinear: this.container.querySelector('.waveform-linear'),
+                    canvasCircular: this.container.querySelector('.waveform-circular'),
+                    linearContainer: this.container.querySelector('.linear-waveform-container'),
+                    
+                    tools: this.container.querySelectorAll('.tool-btn')
+                };
+
+                this.els.nameHeader.textContent = playerName;
+
+                // Event Listeners
+                this.els.addBtn.addEventListener('click', () => this.addItem());
+                this.els.closeVideoBtn.addEventListener('click', () => this.closeVideo());
+                this.els.deleteBtn.addEventListener('click', () => {
+                    if (confirm(`Remove ${playerName}? Data is kept in local storage.`)) {
+                        this.destroy(); 
+                        this.container.remove();
+                        PlayerInstances.splice(PlayerInstances.indexOf(this), 1);
+                    }
+                });
+
+                this.els.loopToggle.addEventListener('change', (e) => this.isLoopEnabled = e.target.checked);
+                this.els.autoplayToggle.addEventListener('change', (e) => this.isAutoplayEnabled = e.target.checked);
+
+                this.els.exportBtn.addEventListener('click', () => this.exportCrate());
+                this.els.importBtn.addEventListener('click', () => this.els.importInput.click());
+                this.els.importInput.addEventListener('change', (e) => this.importCrate(e));
+
+                this.els.btnPlayPause.addEventListener('click', () => this.togglePlayPause());
+                this.els.tonearmAssembly.addEventListener('click', () => this.togglePlayPause());
+
+                // Sync the two volume sliders (DJ vertical vs Normal horizontal)
+                this.els.volSlider.addEventListener('input', (e) => {
+                    const val = parseInt(e.target.value);
+                    if(this.ytPlayer) this.ytPlayer.setVolume(val);
+                    this.els.djVolSlider.value = val;
+                });
+                this.els.djVolSlider.addEventListener('input', (e) => {
+                    const val = parseInt(e.target.value);
+                    if(this.ytPlayer) this.ytPlayer.setVolume(val);
+                    this.els.volSlider.value = val;
+                });
+
+                this.els.pitchSlider.addEventListener('input', (e) => {
+                    const rate = parseFloat(e.target.value);
+                    if(this.ytPlayer && typeof this.ytPlayer.setPlaybackRate === 'function') {
+                        this.ytPlayer.setPlaybackRate(rate);
+                    }
+                    this.els.pitchDisplay.textContent = `SPD: ${rate.toFixed(2)}x`;
+                });
+
+                this.els.djToggle.addEventListener('click', () => this.toggleDjMode());
+                
+                this.els.tools.forEach(c => {
+                    c.addEventListener('click', (e) => {
+                        this.els.tools.forEach(btn => btn.classList.remove('active'));
+                        const btn = e.target.closest('.tool-btn');
+                        btn.classList.add('active');
+                        this.activeTool = btn.dataset.color;
+                        
+                        this.els.playerInstance.classList.remove('tool-hand', 'tool-crayon');
+                        if (this.activeTool === 'hand') {
+                            this.els.playerInstance.classList.add('tool-hand');
+                        } else {
+                            this.els.playerInstance.classList.add('tool-crayon');
+                        }
+                    });
+                });
+
+                // Scrubbing Drag Events
+                const tt = this.els.turntable;
+                tt.addEventListener('mousedown', (e) => this.startDrag(e));
+                tt.addEventListener('touchstart', (e) => this.startDrag(e), {passive: false});
+                window.addEventListener('mousemove', (e) => this.onDrag(e));
+                window.addEventListener('touchmove', (e) => this.onDrag(e), {passive: false});
+                window.addEventListener('mouseup', (e) => this.endDrag(e));
+                window.addEventListener('touchend', (e) => this.endDrag(e));
+
+                this.els.canvasLinear.addEventListener('mousedown', (e) => this.handleCanvasClick(e, 'linear'));
+                // Adding a window listener to handle releasing outside the canvas
+                window.addEventListener('mouseup', () => { if (this.isDragging) this.endDrag(); });
+                window.addEventListener('touchend', () => { if (this.isDragging) this.endDrag(); });
+
+                // We'll let clicks pass through canvas to the turntable directly using pointer-events:none on canvasCircular
+                // If the user is holding a crayon, we need to handle clicks here on the wrapping stage.
+                this.els.djStage.addEventListener('mousedown', (e) => {
+                   if (this.isDjMode && this.activeTool !== 'hand') {
+                       this.handleCanvasClick(e, 'circular');
+                   } 
+                });
+
+                window.addEventListener('resize', () => {
+                    this.resizeCanvases();
+                    this.drawWaveforms();
+                });
+
+                this.loadPlaylistFromLocal();
+                this.resizeCanvases();
+                
+                PlayerInstances.push(this);
+            }
+
+            getCoordinates(e) {
+                if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                if (e.changedTouches && e.changedTouches.length > 0) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+                return { x: e.clientX, y: e.clientY };
+            }
+
+            getAngle(e) {
+                const rect = this.els.turntable.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                const coords = this.getCoordinates(e);
+                return Math.atan2(coords.y - cy, coords.x - cx);
+            }
+
+            togglePlayPause() {
+                if(!this.ytPlayer) return;
+                if (this.playbackState.playing) {
+                    this.ytPlayer.pauseVideo();
+                } else {
+                    this.ytPlayer.playVideo();
+                }
+            }
+
+            showMessage(msg) {
+                this.els.messageBox.textContent = msg;
+                this.els.messageBox.classList.remove('hidden');
+                setTimeout(() => this.els.messageBox.classList.add('hidden'), 4000);
+            }
+
+            loadPlaylistFromLocal() {
+                try {
+                    const d = localStorage.getItem(this.storageKey);
+                    if (d) this.playlistData = JSON.parse(d);
+                } catch(e) {}
+                try {
+                    const m = localStorage.getItem(this.storageKey + '_markers');
+                    if (m) this.markers = JSON.parse(m);
+                } catch(e){}
+                this.updatePlaylistUI();
+            }
+
+            saveDataToLocal() {
+                localStorage.setItem(this.storageKey, JSON.stringify(this.playlistData));
+                localStorage.setItem(this.storageKey + '_markers', JSON.stringify(this.markers));
+            }
+
+            exportCrate() {
+                if(this.playlistData.length === 0) return this.showMessage("Crate is empty!");
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.playlistData));
+                const anchor = document.createElement('a');
+                anchor.setAttribute("href", dataStr);
+                anchor.setAttribute("download", `${this.storageKey}_crate.json`);
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+            }
+
+            importCrate(event) {
+                const file = event.target.files[0];
+                if(!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const imported = JSON.parse(e.target.result);
+                        if(Array.isArray(imported)) {
+                            this.playlistData = imported;
+                            this.saveDataToLocal();
+                            this.updatePlaylistUI();
+                            this.showMessage(`Successfully imported ${imported.length} tracks.`);
+                        }
+                    } catch(err) {
+                        this.showMessage("Invalid JSON format.");
+                    }
+                    this.els.importInput.value = '';
+                };
+                reader.readAsText(file);
+            }
+
+            async addItem() {
+                const url = this.els.urlInput.value.trim();
+                const ytId = extractYoutubeId(url);
+                if (!ytId) return this.showMessage('Valid YouTube URL required.');
+                
+                let title = this.els.titleInput.value.trim();
+                const origBtnText = this.els.addBtn.textContent;
+                this.els.addBtn.textContent = '...';
+                
+                if (!title) {
+                    const fetchedTitle = await fetchYoutubeTitle(ytId);
+                    title = fetchedTitle || `[YOUTUBE] ID: ${ytId}`;
+                }
+                
+                this.els.addBtn.textContent = origBtnText;
+
+                this.playlistData.push({ title, id: ytId });
+                this.saveDataToLocal();
+                this.updatePlaylistUI();
+                this.els.titleInput.value = '';
+                this.els.urlInput.value = '';
+            }
+
+            removeItem(index) {
+                this.playlistData.splice(index, 1);
+                this.saveDataToLocal();
+                this.updatePlaylistUI();
+                if (this.currentVideoIndex === index) this.closeVideo();
+                else if (this.currentVideoIndex > index) this.currentVideoIndex--;
+            }
+
+            updatePlaylistUI() {
+                this.els.playlistContainer.innerHTML = '';
+                this.els.playlistCount.textContent = this.playlistData.length;
+                
+                if (this.playlistData.length === 0) {
+                    this.els.playlistContainer.innerHTML = `<div class="p-4 text-gray-500 text-center italic text-xs">Crate is empty.</div>`;
+                    return;
+                }
+
+                this.playlistData.forEach((item, index) => {
+                    const isPlaying = index === this.currentVideoIndex;
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = `p-3 flex items-center justify-between cursor-pointer transition ${isPlaying ? 'bg-indigo-900 border-l-4 border-indigo-400' : 'hover:bg-gray-800'}`;
+                    itemDiv.onclick = (e) => { if (!e.target.closest('button')) this.openVideo(index); };
+
+                    const titleSpan = document.createElement('span');
+                    titleSpan.className = `text-sm font-medium truncate flex-grow ${isPlaying ? 'text-indigo-200' : 'text-gray-300'}`;
+                    titleSpan.textContent = `${index + 1}. ${item.title}`;
+
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'text-gray-500 hover:text-red-400 ml-2 p-1';
+                    removeBtn.innerHTML = `✕`;
+                    removeBtn.onclick = (e) => { e.stopPropagation(); this.removeItem(index); };
+                    
+                    itemDiv.appendChild(titleSpan);
+                    itemDiv.appendChild(removeBtn);
+                    this.els.playlistContainer.appendChild(itemDiv);
+                });
+            }
+
+            openVideo(index) {
+                if (this.playlistData.length === 0) return;
+                this.els.videoSection.classList.remove('hidden');
+                this.loadVideo(index);
+                // Give the UI a beat to remove 'hidden' so client rects calculate correctly
+                setTimeout(() => this.resizeCanvases(), 100);
+            }
+
+            closeVideo() {
+                this.els.videoSection.classList.add('hidden');
+                this.destroy();
+                this.els.embedContainer.querySelectorAll('.api-target').forEach(e => e.remove());
+                this.currentVideoIndex = -1;
+                this.updatePlaylistUI();
+                if(this.isDjMode) this.toggleDjMode(false); 
+            }
+
+            destroy() {
+                if(this.pollInterval) clearInterval(this.pollInterval);
+                if(this.ytPlayer && typeof this.ytPlayer.destroy === 'function') this.ytPlayer.destroy();
+                this.ytPlayer = null;
+                this.playbackState = { currentTime: 0, duration: 1, playing: false };
+                this.visualRotation = 0;
+                
+                this.els.pitchSlider.value = 1.0;
+                this.els.pitchDisplay.textContent = `SPD: 1.0x`;
+                
+                this.updatePlayBtnUI();
+            }
+
+            loadVideo(index) {
+                if (index < 0 || index >= this.playlistData.length) return;
+                
+                this.destroy();
+                this.currentVideoIndex = index;
+                const videoItem = this.playlistData[index];
+                
+                this.els.videoDisplayTitle.textContent = videoItem.title;
+                
+                const thumbUrl = `https://img.youtube.com/vi/${videoItem.id}/mqdefault.jpg`;
+                this.els.turntableLabel.style.backgroundImage = `url('${thumbUrl}')`;
+
+                this.els.embedContainer.querySelectorAll('.api-target').forEach(e => e.remove());
+                const targetDiv = document.createElement('div');
+                targetDiv.className = 'api-target'; 
+                targetDiv.id = `api-target-${this.storageKey}-${Date.now()}`;
+                
+                this.els.embedContainer.insertBefore(targetDiv, this.els.turntable);
+                
+                if (!isYouTubeReady) {
+                    this.showMessage("YouTube API loading...");
+                    setTimeout(() => this.loadVideo(index), 1000);
+                    return;
+                }
+
+                this.ytPlayer = new YT.Player(targetDiv.id, {
+                    videoId: videoItem.id,
+                    playerVars: { 
+                        autoplay: 1, 
+                        controls: 1, 
+                        disablekb: 1, fs: 0, iv_load_policy: 3, rel: 0, modestbranding: 1, playsinline: 1
+                    },
+                    events: {
+                        onReady: (e) => { 
+                            this.playbackState.duration = this.ytPlayer.getDuration() || 1;
+                        },
+                        onStateChange: (e) => {
+                            this.playbackState.playing = (e.data === YT.PlayerState.PLAYING);
+                            if (e.data === YT.PlayerState.PLAYING && this.playbackState.duration <= 1) {
+                                this.playbackState.duration = this.ytPlayer.getDuration();
+                            }
+                            this.updatePlayBtnUI();
+                        }
+                    }
+                });
+                
+                this.lastPollTime = Date.now();
+                this.pollInterval = setInterval(() => this.pollState(), 50); 
+                this.updatePlaylistUI();
+            }
+
+            updatePlayBtnUI() {
+                if (this.playbackState.playing) {
+                    this.els.btnPlayPause.innerHTML = '⏸';
+                    this.els.btnPlayPause.classList.replace('bg-indigo-600', 'bg-yellow-600');
+                    this.els.btnPlayPause.classList.replace('hover:bg-indigo-500', 'hover:bg-yellow-500');
+                } else {
+                    this.els.btnPlayPause.innerHTML = '▶';
+                    this.els.btnPlayPause.classList.replace('bg-yellow-600', 'bg-indigo-600');
+                    this.els.btnPlayPause.classList.replace('hover:bg-yellow-500', 'hover:bg-indigo-500');
+                }
+                this.drawWaveforms(); 
+            }
+
+            pollState() {
+                let now = Date.now();
+                let dt = (now - this.lastPollTime) / 1000;
+                this.lastPollTime = now;
+
+                if(!this.ytPlayer || typeof this.ytPlayer.getCurrentTime !== 'function') return;
+                this.playbackState.currentTime = this.ytPlayer.getCurrentTime() || 0;
+                
+                this.els.timeDisplay.textContent = `${formatTime(this.playbackState.currentTime)} / ${formatTime(this.playbackState.duration)}`;
+                
+                // Track Loop / Autoplay fallback
+                if (this.playbackState.duration > 2 && this.playbackState.currentTime >= this.playbackState.duration - 0.5) {
+                    if (this.isLoopEnabled) {
+                        this.ytPlayer.seekTo(0);
+                        this.ytPlayer.playVideo();
+                    } else if (this.isAutoplayEnabled && this.currentVideoIndex + 1 < this.playlistData.length) {
+                        this.loadVideo(this.currentVideoIndex + 1);
+                    }
+                }
+                
+                if (!this.isDragging) {
+                    if (this.playbackState.playing) {
+                        // Realistically spin at 33 1/3 RPM during playback
+                        this.visualRotation += (33.33 / 60) * 360 * dt;
+                    }
+                    this.drawWaveforms();
+                }
+            }
+
+            apiSeekTo(seconds) {
+                if(!this.ytPlayer) return;
+                let target = Math.max(0, Math.min(seconds, this.playbackState.duration - 0.5));
+                this.ytPlayer.seekTo(target, true);
+                this.playbackState.currentTime = target;
+                this.drawWaveforms();
+            }
+
+            toggleDjMode(forceMode = null) {
+                if (forceMode !== null) {
+                    this.isDjMode = forceMode;
+                } else {
+                    this.isDjMode = !this.isDjMode;
+                }
+                
+                if (this.isDjMode) {
+                    this.els.djToggle.classList.replace('bg-purple-600', 'bg-emerald-600');
+                    this.els.djToggle.innerHTML = '🎧 Normal Mode';
+                    
+                    this.els.djStage.classList.add('dj-mode-stage'); 
+                    this.els.embedContainer.classList.add('dj-mode-active');
+                    this.els.canvasCircular.classList.remove('hidden');
+                    this.els.linearContainer.classList.add('hidden');
+                    
+                    this.els.volContainer.classList.remove('hidden');
+                    this.els.tonearmAssembly.classList.remove('hidden');
+                    this.els.pitchContainer.classList.remove('hidden');
+                    this.els.pitchDisplay.classList.remove('hidden');
+                } else {
+                    this.els.djToggle.classList.replace('bg-emerald-600', 'bg-purple-600');
+                    this.els.djToggle.innerHTML = '🎧 Enter DJ Mode';
+                    
+                    this.els.djStage.classList.remove('dj-mode-stage');
+                    this.els.embedContainer.classList.remove('dj-mode-active');
+                    this.els.canvasCircular.classList.add('hidden');
+                    this.els.linearContainer.classList.remove('hidden');
+                    
+                    this.els.volContainer.classList.add('hidden');
+                    this.els.tonearmAssembly.classList.add('hidden');
+                    this.els.pitchContainer.classList.add('hidden');
+                    this.els.pitchDisplay.classList.add('hidden');
+                }
+                
+                setTimeout(() => this.resizeCanvases(), 400); 
+            }
+
+            // --- Relative Scratching Drag Math ---
+            
+            startDrag(e) {
+                if (!this.isDjMode || this.playbackState.duration <= 1 || this.activeTool !== 'hand') return;
+                this.isDragging = true;
+                
+                // Track previous play state and pause instantly
+                this.wasPlayingBeforeDrag = this.playbackState.playing;
+                if(this.ytPlayer) this.ytPlayer.pauseVideo();
+                
+                this.lastAngle = this.getAngle(e);
+                if (e.cancelable) e.preventDefault(); 
+            }
+
+            onDrag(e) {
+                if (!this.isDragging || !this.isDjMode || this.activeTool !== 'hand') return;
+                
+                let currentAngle = this.getAngle(e);
+                let delta = currentAngle - this.lastAngle;
+                
+                if (delta > Math.PI) delta -= Math.PI * 2;
+                if (delta < -Math.PI) delta += Math.PI * 2;
+
+                // Visually rotate record to follow finger exactly
+                this.visualRotation += delta * (180 / Math.PI);
+
+                // Scrub the track (1 physical relative rotation = full track length)
+                let scrubSecs = (delta / (Math.PI * 2)) * this.playbackState.duration;
+                let newTime = this.playbackState.currentTime + scrubSecs;
+                
+                this.playbackState.currentTime = Math.max(0, Math.min(newTime, this.playbackState.duration - 0.5));
+                this.drawWaveforms(); // Draw updates instantly for absolute visual feedback
+                
+                const now = Date.now();
+                // Throttle YT seeks to prevent iframe freezing
+                if (now - this.lastSeekTime > 150) {
+                    if(this.ytPlayer) this.ytPlayer.seekTo(this.playbackState.currentTime, true);
+                    this.lastSeekTime = now;
+                }
+                
+                this.lastAngle = currentAngle;
+                if (e.cancelable) e.preventDefault();
+            }
+
+            endDrag(e) { 
+                if (!this.isDragging) return;
+                this.isDragging = false; 
+                
+                // Commit final position to YouTube API and resume if needed
+                if(this.ytPlayer) {
+                    this.ytPlayer.seekTo(this.playbackState.currentTime, true);
+                    if (this.wasPlayingBeforeDrag) {
+                        this.ytPlayer.playVideo();
+                    }
+                }
+            }
+
+            // --- UI Rendering ---
+            resizeCanvases() {
+                const lRect = this.els.canvasLinear.parentElement.getBoundingClientRect();
+                // Ensure width is safely captured when un-hiding
+                this.els.canvasLinear.width = lRect.width || 100;
+                this.els.canvasLinear.height = 60;
+                
+                const cRect = this.els.djStage.getBoundingClientRect();
+                this.els.canvasCircular.width = cRect.width || 100;
+                this.els.canvasCircular.height = cRect.height || 100;
+                this.drawWaveforms();
+            }
+
+            drawWaveforms() {
+                this.drawLinearWaveform();
+                if(this.isDjMode) {
+                    this.drawCircularWaveform();
+                    const progress = this.playbackState.duration > 1 ? (this.playbackState.currentTime / this.playbackState.duration) : 0;
+                    
+                    // Visually spin the record based on our continuous/relative tracked rotation
+                    this.els.turntable.style.transform = `rotate(${this.visualRotation}deg)`;
+                    
+                    // Animate the Tonearm 
+                    let armAngle = 0;
+                    if (this.playbackState.playing || this.isDragging) {
+                        armAngle = 15 + (progress * 20); // Drops arm tracking inward 
+                    }
+                    this.els.tonearmAssembly.style.transform = `rotate(${armAngle}deg)`;
+                }
+            }
+
+            drawLinearWaveform() {
+                const cvs = this.els.canvasLinear;
+                const ctx = cvs.getContext('2d');
+                const w = cvs.width; const h = cvs.height;
+                ctx.clearRect(0, 0, w, h);
+
+                const progress = this.playbackState.duration > 1 ? this.playbackState.currentTime / this.playbackState.duration : 0;
+
+                const bars = this.waveformAmplitudes.length;
+                const barW = w / bars;
+                for(let i=0; i<bars; i++) {
+                    let amp = this.waveformAmplitudes[i] * (h * 0.8);
+                    let x = i * barW;
+                    let isPast = (i / bars) <= progress;
+                    ctx.fillStyle = isPast ? '#6366f1' : '#4b5563'; 
+                    ctx.fillRect(x, (h - amp)/2, barW - 1, amp);
+                }
+
+                this.markers.forEach(m => {
+                    let mx = (m.time / this.playbackState.duration) * w;
+                    ctx.fillStyle = m.color;
+                    ctx.fillRect(mx - 1.5, 0, 3, h); 
+                    ctx.beginPath(); ctx.moveTo(mx - 5, 0); ctx.lineTo(mx + 5, 0); ctx.lineTo(mx, 5); ctx.fill();
+                });
+
+                let px = progress * w;
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(px - 1, 0, 2, h);
+            }
+
+            drawCircularWaveform() {
+                const cvs = this.els.canvasCircular;
+                const ctx = cvs.getContext('2d');
+                const w = cvs.width; const h = cvs.height;
+                const turntableCenterX = w * 0.50; 
+                const cy = h / 2;
+                ctx.clearRect(0, 0, w, h);
+
+                // Ensure the base radius maps correctly precisely to the outside edge of the vinyl overlay
+                const baseRadius = (Math.min(w, h) * 0.40); 
+                
+                const progress = this.playbackState.duration > 1 ? this.playbackState.currentTime / this.playbackState.duration : 0;
+                const currentAngle = (progress * Math.PI * 2) - (Math.PI / 2); 
+
+                const bars = 180;
+                for(let i=0; i<bars; i++) {
+                    let angle = (i / bars) * Math.PI * 2 - (Math.PI / 2);
+                    let amp = this.waveformAmplitudes[i % this.waveformAmplitudes.length] * 40;
+                    
+                    let innerX = turntableCenterX + Math.cos(angle) * (baseRadius + 2);
+                    let innerY = cy + Math.sin(angle) * (baseRadius + 2);
+                    let outerX = turntableCenterX + Math.cos(angle) * (baseRadius + 2 + amp);
+                    let outerY = cy + Math.sin(angle) * (baseRadius + 2 + amp);
+
+                    let normAngle = angle + Math.PI/2;
+                    let normCurr = currentAngle + Math.PI/2;
+                    let isPast = normAngle <= normCurr;
+
+                    ctx.strokeStyle = isPast ? '#818cf8' : '#6b7280';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(innerX, innerY);
+                    ctx.lineTo(outerX, outerY);
+                    ctx.stroke();
+                }
+
+                this.markers.forEach(m => {
+                    let mProg = m.time / this.playbackState.duration;
+                    let mAngle = (mProg * Math.PI * 2) - (Math.PI / 2);
+                    
+                    let innerX = turntableCenterX + Math.cos(mAngle) * (baseRadius - 5);
+                    let innerY = cy + Math.sin(mAngle) * (baseRadius - 5);
+                    let outerX = turntableCenterX + Math.cos(mAngle) * (baseRadius + 45);
+                    let outerY = cy + Math.sin(mAngle) * (baseRadius + 45);
+
+                    ctx.strokeStyle = m.color;
+                    ctx.lineWidth = 6;
+                    ctx.beginPath();
+                    ctx.moveTo(innerX, innerY);
+                    ctx.lineTo(outerX, outerY);
+                    ctx.stroke();
+                });
+
+                let px = turntableCenterX + Math.cos(currentAngle) * (baseRadius + 12);
+                let py = cy + Math.sin(currentAngle) * (baseRadius + 12);
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(px, py, 6, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            handleCanvasClick(e, mode) {
+                if(this.playbackState.duration <= 1) return;
+                const rect = e.target.getBoundingClientRect();
+                let clickProgress = 0;
+
+                if (mode === 'linear') {
+                    let x = e.clientX - rect.left;
+                    clickProgress = x / rect.width;
+                    
+                    if (this.activeTool === 'hand') {
+                        this.apiSeekTo(clickProgress * this.playbackState.duration);
+                        return;
+                    }
+                } else if (mode === 'circular') {
+                    const turntableCenterX = rect.width * 0.50; 
+                    let x = e.clientX - rect.left - turntableCenterX;
+                    let y = e.clientY - rect.top - rect.height/2;
+                    let dist = Math.sqrt(x*x + y*y);
+                    const baseRadius = (Math.min(rect.width, rect.height) * 0.40);
+                    
+                    // Do nothing if clicked inside the record area, dragging handles that
+                    if (dist < baseRadius) return; 
+
+                    let angle = Math.atan2(y, x); 
+                    clickProgress = (angle + Math.PI/2) / (Math.PI*2);
+                    if (clickProgress < 0) clickProgress += 1;
+                    
+                    if (this.activeTool === 'hand') return;
+                }
+
+                let clickTime = clickProgress * this.playbackState.duration;
+                let clickedMarkerIndex = -1;
+                for (let i = 0; i < this.markers.length; i++) {
+                    let timeDiff = Math.abs(this.markers[i].time - clickTime);
+                    if (timeDiff / this.playbackState.duration < 0.015) {
+                        clickedMarkerIndex = i; break;
+                    }
+                }
+
+                if (this.activeTool === 'rubber') {
+                    if (clickedMarkerIndex !== -1) {
+                        this.markers.splice(clickedMarkerIndex, 1);
+                        this.saveDataToLocal();
+                    }
+                } else if (this.activeTool !== 'hand') {
+                    if (clickedMarkerIndex !== -1) {
+                        this.apiSeekTo(this.markers[clickedMarkerIndex].time);
+                    } else {
+                        this.markers.push({ time: clickTime, color: this.activeTool });
+                        this.saveDataToLocal();
+                    }
+                }
+                this.drawWaveforms();
+            }
+        }
+
+        // --- Initialization ---
+        let playerCount = 0;
+        function addPlayer() {
+            playerCount++;
+            new PlaylistPlayer('players-grid', `dj_data_deck_${playerCount}`, `Deck ${playerCount}`);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Buffer Init Listener
+            document.getElementById('preBufferToggle').addEventListener('change', (e) => {
+                MicRecorder.toggleBuffer(e.target.checked);
+            });
+            document.getElementById('micRecordBtn').addEventListener('click', () => {
+                MicRecorder.toggleRecord();
+            });
+
+            addPlayer(); addPlayer(); 
+            document.getElementById('addPlayerBtn').addEventListener('click', addPlayer);
+            
+            // Modal Logic
+            const infoBtn = document.getElementById('infoBtn');
+            const closeInfoBtn = document.getElementById('closeInfoBtn');
+            const infoModal = document.getElementById('infoModal');
+            
+            infoBtn.addEventListener('click', () => infoModal.classList.remove('hidden'));
+            closeInfoBtn.addEventListener('click', () => infoModal.classList.add('hidden'));
+            infoModal.addEventListener('click', (e) => {
+                if(e.target === infoModal) infoModal.classList.add('hidden');
+            });
+        });
+    </script>
+</body>
+</html>
