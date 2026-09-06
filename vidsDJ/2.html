@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi Advanced Local Playlist Player & DJ Turntables</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Video APIs -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://player.vimeo.com/api/player.js"></script>
+    <!-- Configure Tailwind to use the Inter font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light background */
+            min-height: 100vh;
+        }
+        /* Video Container */
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+            height: 0;
+            overflow: hidden;
+            background-color: #000;
+            transition: all 0.5s ease-in-out;
+        }
+        .video-container iframe, .video-container > div {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+        }
+        
+        /* DJ Mode Styles */
+        .dj-mode-active .video-container {
+            /* Circular cutout */
+            clip-path: circle(48% at 50% 50%);
+            padding-bottom: 100%; /* Make it a square for the record */
+        }
+        .dj-mode-active .video-container iframe, .dj-mode-active .video-container > div {
+            /* Keep video centered inside the circle */
+            height: 100%;
+            width: 177.77%; /* 16:9 correction */
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .turntable-overlay {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: radial-gradient(circle, transparent 20%, rgba(20,20,20,0.5) 21%, rgba(10,10,10,0.8) 80%, rgba(0,0,0,0.95) 100%);
+            border: 8px solid #222;
+            cursor: grab;
+            z-index: 10;
+            touch-action: none; /* Prevent scrolling when scrubbing */
+        }
+        .turntable-overlay:active {
+            cursor: grabbing;
+        }
+        /* Inner label of the record */
+        .turntable-label {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 25%; height: 25%;
+            border-radius: 50%;
+            border: 2px dashed rgba(255,255,255,0.4);
+            pointer-events: none;
+            box-shadow: 0 0 10px rgba(0,0,0,0.8) inset;
+        }
+
+        /* Style for editable title input */
+        .editable-title {
+            background-color: transparent; border: none; outline: none; padding: 0; margin: 0; font-size: 0.95rem; line-height: 1.25rem; width: 100%; transition: all 0.1s;
+        }
+        .editable-title:focus {
+            background-color: #e5e7eb; border-radius: 0.25rem; padding: 0.1rem 0.5rem;
+        }
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="flex flex-col items-center p-4 sm:p-6 lg:p-8">
+
+    <!-- Global Header -->
+    <div class="w-full max-w-[1600px] flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-3xl font-extrabold text-gray-900">Multi Playlist DJ Player</h1>
+            <p class="text-gray-600 text-sm mt-1">Play and scratch multiple videos simultaneously.</p>
+        </div>
+        <div class="flex gap-3">
+            <button id="addPlayerBtn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow hover:bg-blue-700 transition duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                Add Player
+            </button>
+            <button id="infoButton" class="bg-white text-gray-600 hover:text-blue-600 transition duration-150 p-2 rounded-full shadow focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="How to use this site">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Multi Player Grid -->
+    <div id="players-grid" class="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6 w-full max-w-[1600px]">
+        <!-- Dynamic containers inserted here -->
+    </div>
+
+    <!-- ==========================================
+         TEMPLATE: Used by JS to instantiate players 
+         ========================================== -->
+    <template id="player-template">
+        <div class="player-instance w-full bg-white p-5 sm:p-6 rounded-xl shadow-xl flex flex-col h-full border border-gray-100 transition-all">
+            
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-gray-800 player-name">Player</h2>
+                <div class="flex gap-2">
+                    <button class="dj-mode-toggle text-xs font-bold text-white bg-indigo-600 px-3 py-1 rounded-md hover:bg-indigo-700 transition shadow">🎧 DJ Mode</button>
+                    <button class="delete-player-btn text-xs font-semibold text-red-600 px-2 py-1 bg-red-50 hover:bg-red-100 rounded-md transition" title="Remove Player">X</button>
+                </div>
+            </div>
+
+            <!-- INLINE VIDEO PLAYER (Hidden initially) -->
+            <div class="video-section hidden mb-5 bg-gray-900 rounded-lg overflow-hidden shadow-inner flex-shrink-0">
+                
+                <!-- Video Header -->
+                <div class="p-2 sm:p-3 flex justify-between items-center bg-gray-800 text-white z-20 relative">
+                    <span class="video-display-title font-semibold truncate pr-4 text-sm sm:text-base">Title</span>
+                    <button class="close-video-btn text-gray-400 hover:text-white transition focus:outline-none" title="Close Video">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Iframe / DJ Turntable Container -->
+                <div class="video-embed-container video-container relative group">
+                    <!-- Turntable Overlay (shown in DJ mode) -->
+                    <div class="turntable-overlay hidden opacity-0 group-[.dj-mode-active]:opacity-100 group-[.dj-mode-active]:block transition-opacity duration-300">
+                        <div class="turntable-label"></div>
+                        <!-- Progress Ring -->
+                        <svg class="absolute inset-0 w-full h-full transform -rotate-90 pointer-events-none" viewBox="0 0 100 100">
+                            <!-- Background Track -->
+                            <circle cx="50" cy="50" r="48" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"></circle>
+                            <!-- Active Red Progress -->
+                            <circle class="dj-progress-ring transition-all duration-75" cx="50" cy="50" r="48" fill="none" stroke="#ef4444" stroke-width="3" stroke-dasharray="301.59" stroke-dashoffset="301.59"></circle>
+                            <!-- Markers -->
+                            <circle class="marker-a-dot hidden" cx="50" cy="2" r="3" fill="#10b981"></circle>
+                            <circle class="marker-b-dot hidden" cx="50" cy="2" r="3" fill="#f59e0b"></circle>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- DJ Advanced Controls (Visible only in DJ Mode) -->
+                <div class="dj-controls hidden bg-gray-800 border-t border-gray-700 p-3 flex-col gap-3">
+                    <!-- Volume -->
+                    <div class="flex items-center gap-2 text-white text-xs font-semibold">
+                        <span>VOL</span>
+                        <input type="range" min="0" max="100" value="100" class="vol-slider flex-grow h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                    </div>
+                    <!-- Markers & Looping -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <button class="set-marker-a bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded transition">Mark A</button>
+                        <button class="set-marker-b bg-amber-500 hover:bg-amber-600 text-white py-1.5 rounded transition">Mark B</button>
+                        <button class="clear-markers bg-gray-600 hover:bg-gray-500 text-white py-1.5 rounded transition">Clear</button>
+                        
+                        <div class="flex items-center bg-gray-700 rounded overflow-hidden">
+                            <button class="toggle-loop w-1/2 bg-gray-600 hover:bg-gray-500 text-white py-1.5 border-r border-gray-800 transition disabled:opacity-50" disabled title="Toggle Loop">Loop</button>
+                            <input type="number" placeholder="&#8734;" min="1" class="loop-count w-1/2 bg-gray-700 text-white text-center py-1.5 outline-none placeholder-gray-400" title="Loop Count (empty = infinite)">
+                        </div>
+                    </div>
+                    <div class="flex justify-between px-1 text-[10px] text-gray-400 font-mono tracking-wider">
+                        <span>A: <span class="marker-a-display">--:--</span></span>
+                        <span>B: <span class="marker-b-display">--:--</span></span>
+                        <span>LOOPS: <span class="loop-status-display">0</span></span>
+                    </div>
+                </div>
+
+                <!-- Video Footer Controls -->
+                <div class="flex items-center justify-between p-2 sm:p-3 bg-gray-800 text-white border-t border-gray-700 relative z-20">
+                    <button class="prev-btn px-3 py-1.5 bg-gray-700 hover:bg-blue-600 rounded-md transition text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed">&larr; Prev</button>
+                    <span class="video-counter text-sm font-medium text-gray-300"></span>
+                    <button class="next-btn px-3 py-1.5 bg-gray-700 hover:bg-blue-600 rounded-md transition text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Next &rarr;</button>
+                </div>
+            </div>
+
+            <!-- Add Video Form -->
+            <div class="mb-5 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h3 class="text-sm font-bold mb-2 text-gray-700 uppercase tracking-wide">Add Video</h3>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input type="text" class="video-title-input w-full sm:w-1/3 p-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Optional Title">
+                    <input type="url" class="video-url-input w-full sm:w-2/3 p-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="YouTube or Vimeo URL">
+                    <button class="add-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition text-sm flex-shrink-0">Add</button>
+                </div>
+            </div>
+
+            <!-- Playlist Area -->
+            <div class="flex flex-col flex-grow min-h-[250px] mb-5">
+                <h3 class="text-lg font-bold mb-2 text-gray-800">Playlist (<span class="playlist-count">0</span>)</h3>
+                <div class="playlist-container custom-scrollbar bg-white border border-gray-200 rounded-lg divide-y divide-gray-100 flex-grow max-h-[350px] overflow-y-auto">
+                    <!-- Items appended here -->
+                </div>
+                <div class="empty-message p-6 text-gray-400 text-center italic border border-gray-200 rounded-lg mt-0">
+                    Playlist is empty. Add a URL above!
+                </div>
+            </div>
+
+            <!-- Bottom Controls -->
+            <div class="mt-auto">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" class="autoplay-toggle h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                        <label class="text-gray-700 text-sm font-medium select-none cursor-pointer">Autoplay</label>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button class="export-btn bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-1.5 px-3 rounded text-sm transition">Export CSV</button>
+                        <button class="import-btn bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-1.5 px-3 rounded text-sm transition">Import CSV</button>
+                        <input type="file" class="import-input hidden" accept=".csv">
+                    </div>
+                    <button class="start-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow transition transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed">
+                        Start
+                    </button>
+                </div>
+                <!-- Transient Messages -->
+                <div class="message-box mt-3 p-2 bg-yellow-100 border border-yellow-400 text-yellow-700 text-sm rounded-lg hidden transition-opacity"></div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Global Instruction Modal -->
+    <div id="instructionModal" class="hidden fixed inset-0 z-50 bg-black bg-opacity-80 flex items-center justify-center p-4 transition-opacity duration-300" onclick="closeInstructionModal(event)">
+        <div class="relative w-full max-w-lg bg-white p-6 rounded-xl shadow-2xl" onclick="event.stopPropagation()">
+            <h3 class="text-2xl font-bold text-gray-900 mb-4">How to Use Multi DJ Player</h3>
+            <button class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition" onclick="closeInstructionModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            <div class="space-y-4 text-gray-700 text-sm h-80 overflow-y-auto custom-scrollbar pr-2">
+                <p>This application allows you to load and control multiple independent video players.</p>
+                <h4 class="font-bold border-b pb-1">Features:</h4>
+                <ul class="list-disc list-inside ml-2 space-y-2">
+                    <li><strong>Add Players:</strong> Click the "Add Player" button to create more independent playlist sections.</li>
+                    <li><strong>DJ Mode:</strong> Toggle DJ Mode on any active video. The video transforms into a record.</li>
+                    <li><strong>Scrubbing (Turntable):</strong> In DJ Mode, click/touch the record overlay and drag in a circle (clockwise to fast-forward, counter-clockwise to rewind).</li>
+                    <li><strong>Mark & Loop:</strong> Use "Mark A" and "Mark B" to isolate a section of the video. Toggle the Loop button to continuously repeat that section. Input a number to limit the iterations.</li>
+                    <li><strong>Volume Control:</strong> Each DJ panel has a dedicated volume slider to mix audio across players.</li>
+                    <li><strong>Persistent Playlists:</strong> Data is saved per-player to your local browser storage.</li>
+                </ul>
+            </div>
+            <button onclick="closeInstructionModal()" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition">Let's Play</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Global YouTube API Ready Tracker ---
+        let isYouTubeReady = false;
+        window.onYouTubeIframeAPIReady = function() {
+            isYouTubeReady = true;
+        };
+
+        // --- Global Helper Functions ---
+        function extractYoutubeId(url) {
+            const pattern = /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([^&\n?#]+)/i;
+            const match = url.match(pattern);
+            if (match && match[1] && match[1].length === 11) {
+                return { id: match[1], platform: 'youtube' };
+            }
+            return null;
+        }
+
+        function extractVimeoId(url) {
+            const pattern = /vimeo\.com\/(?:video\/)?(\d+)/;
+            const match = url.match(pattern);
+            if (match && match[1]) {
+                return { id: match[1], platform: 'vimeo' };
+            }
+            return null;
+        }
+
+        function extractVideoInfo(url) {
+            return extractYoutubeId(url) || extractVimeoId(url);
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "--:--";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        // --- Class Definition for a Player Instance ---
+        class PlaylistPlayer {
+            constructor(containerId, storageKey, playerName) {
+                this.containerParent = document.getElementById(containerId);
+                this.storageKey = storageKey;
+                this.playlistData = [];
+                this.currentVideoIndex = -1;
+                
+                // DJ & Playback State
+                this.platformPlayer = null; // Holds YT or Vimeo object
+                this.currentPlatform = null;
+                this.isDjMode = false;
+                this.playbackState = {
+                    currentTime: 0,
+                    duration: 0,
+                    playing: false
+                };
+                
+                // Markers & Loop
+                this.markerA = null;
+                this.markerB = null;
+                this.isLooping = false;
+                this.loopCountInput = -1; // -1 = infinite
+                this.loopsRemaining = -1;
+                this.pollInterval = null;
+
+                // Turntable interaction
+                this.isDragging = false;
+                this.lastAngle = null;
+
+                // 1. Create Wrapper and Clone Template
+                this.container = document.createElement('div');
+                this.container.id = `wrapper-${storageKey}`;
+                this.containerParent.appendChild(this.container);
+
+                const template = document.getElementById('player-template').content.cloneNode(true);
+                this.container.appendChild(template);
+
+                // 2. Bind DOM Elements strictly within THIS container
+                this.els = {
+                    nameHeader: this.container.querySelector('.player-name'),
+                    videoSection: this.container.querySelector('.video-section'),
+                    videoDisplayTitle: this.container.querySelector('.video-display-title'),
+                    closeVideoBtn: this.container.querySelector('.close-video-btn'),
+                    embedContainer: this.container.querySelector('.video-embed-container'),
+                    prevBtn: this.container.querySelector('.prev-btn'),
+                    nextBtn: this.container.querySelector('.next-btn'),
+                    videoCounter: this.container.querySelector('.video-counter'),
+                    titleInput: this.container.querySelector('.video-title-input'),
+                    urlInput: this.container.querySelector('.video-url-input'),
+                    addBtn: this.container.querySelector('.add-btn'),
+                    playlistContainer: this.container.querySelector('.playlist-container'),
+                    playlistCount: this.container.querySelector('.playlist-count'),
+                    emptyMessage: this.container.querySelector('.empty-message'),
+                    autoplayToggle: this.container.querySelector('.autoplay-toggle'),
+                    exportBtn: this.container.querySelector('.export-btn'),
+                    importBtn: this.container.querySelector('.import-btn'),
+                    importInput: this.container.querySelector('.import-input'),
+                    startBtn: this.container.querySelector('.start-btn'),
+                    messageBox: this.container.querySelector('.message-box'),
+                    deleteBtn: this.container.querySelector('.delete-player-btn'),
+                    
+                    // DJ Elements
+                    djToggle: this.container.querySelector('.dj-mode-toggle'),
+                    djControls: this.container.querySelector('.dj-controls'),
+                    turntable: this.container.querySelector('.turntable-overlay'),
+                    progressRing: this.container.querySelector('.dj-progress-ring'),
+                    markerADot: this.container.querySelector('.marker-a-dot'),
+                    markerBDot: this.container.querySelector('.marker-b-dot'),
+                    volSlider: this.container.querySelector('.vol-slider'),
+                    btnMarkA: this.container.querySelector('.set-marker-a'),
+                    btnMarkB: this.container.querySelector('.set-marker-b'),
+                    btnClearMarks: this.container.querySelector('.clear-markers'),
+                    btnToggleLoop: this.container.querySelector('.toggle-loop'),
+                    inpLoopCount: this.container.querySelector('.loop-count'),
+                    dispMarkA: this.container.querySelector('.marker-a-display'),
+                    dispMarkB: this.container.querySelector('.marker-b-display'),
+                    dispLoopStat: this.container.querySelector('.loop-status-display'),
+                };
+
+                // Initialize UI text
+                this.els.nameHeader.textContent = playerName;
+
+                // 3. Attach Event Listeners
+                this.els.addBtn.addEventListener('click', () => this.addItem());
+                this.els.startBtn.addEventListener('click', () => this.openVideo(0));
+                this.els.closeVideoBtn.addEventListener('click', () => this.closeVideo());
+                this.els.prevBtn.addEventListener('click', () => this.loadVideo(this.currentVideoIndex - 1));
+                this.els.nextBtn.addEventListener('click', () => this.loadVideo(this.currentVideoIndex + 1));
+                this.els.exportBtn.addEventListener('click', () => this.exportCSV());
+                this.els.importBtn.addEventListener('click', () => this.els.importInput.click());
+                this.els.importInput.addEventListener('change', (e) => this.importCSV(e));
+                
+                // Player Deletion
+                this.els.deleteBtn.addEventListener('click', () => {
+                    if (confirm(`Remove ${playerName}? Data will be kept in local storage.`)) {
+                        this.destroy();
+                        this.container.remove();
+                    }
+                });
+
+                // DJ Mode Events
+                this.els.djToggle.addEventListener('click', () => this.toggleDjMode());
+                this.els.volSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
+                
+                // Markers
+                this.els.btnMarkA.addEventListener('click', () => this.setMarker('A'));
+                this.els.btnMarkB.addEventListener('click', () => this.setMarker('B'));
+                this.els.btnClearMarks.addEventListener('click', () => this.clearMarkers());
+                this.els.btnToggleLoop.addEventListener('click', () => this.toggleLoop());
+                
+                // Turntable Drag Events
+                const table = this.els.turntable;
+                table.addEventListener('mousedown', (e) => this.startDrag(e));
+                table.addEventListener('touchstart', (e) => this.startDrag(e.touches[0]), {passive: false});
+                window.addEventListener('mousemove', (e) => this.onDrag(e));
+                window.addEventListener('touchmove', (e) => this.onDrag(e.touches[0]), {passive: false});
+                window.addEventListener('mouseup', () => this.endDrag());
+                window.addEventListener('touchend', () => this.endDrag());
+
+                // 4. Load initial data
+                this.loadPlaylistFromLocal();
+            }
+
+            // --- Storage & UI Management ---
+
+            showMessage(msg) {
+                this.els.messageBox.textContent = msg;
+                this.els.messageBox.classList.remove('hidden');
+                setTimeout(() => this.els.messageBox.classList.add('hidden'), 4000);
+            }
+
+            loadPlaylistFromLocal() {
+                try {
+                    const storedData = localStorage.getItem(this.storageKey);
+                    if (storedData) {
+                        const parsed = JSON.parse(storedData);
+                        this.playlistData = parsed.map(item => ({ ...item, platform: item.platform || 'youtube' }));
+                    }
+                } catch (error) {
+                    this.playlistData = [];
+                }
+                this.updateUI();
+            }
+
+            savePlaylistToLocal() {
+                localStorage.setItem(this.storageKey, JSON.stringify(this.playlistData));
+            }
+
+            addItem() {
+                const url = this.els.urlInput.value.trim();
+                const videoInfo = extractVideoInfo(url);
+                if (!videoInfo) return this.showMessage('Valid YouTube or Vimeo URL required.');
+                const title = this.els.titleInput.value.trim() || `[${videoInfo.platform.toUpperCase()}] ID: ${videoInfo.id}`;
+
+                this.playlistData.push({ title, id: videoInfo.id, platform: videoInfo.platform });
+                this.savePlaylistToLocal();
+                this.updateUI();
+                this.els.titleInput.value = '';
+                this.els.urlInput.value = '';
+            }
+
+            removeItem(index) {
+                this.playlistData.splice(index, 1);
+                this.savePlaylistToLocal();
+                this.updateUI();
+                if (this.currentVideoIndex === index) {
+                    this.closeVideo();
+                } else if (this.currentVideoIndex > index) {
+                    this.currentVideoIndex--;
+                }
+            }
+
+            handleTitleEdit(index, inputElement) {
+                const newTitle = inputElement.value.trim();
+                if (newTitle) {
+                    this.playlistData[index].title = newTitle;
+                    this.savePlaylistToLocal();
+                    if (this.currentVideoIndex === index) this.els.videoDisplayTitle.textContent = newTitle;
+                }
+            }
+
+            updateUI() {
+                this.els.playlistContainer.innerHTML = '';
+                this.els.playlistCount.textContent = this.playlistData.length;
+                this.els.startBtn.disabled = this.playlistData.length === 0;
+                
+                if (this.playlistData.length === 0) {
+                    this.els.emptyMessage.classList.remove('hidden');
+                    this.els.playlistContainer.classList.add('hidden');
+                    return;
+                }
+                this.els.emptyMessage.classList.add('hidden');
+                this.els.playlistContainer.classList.remove('hidden');
+
+                this.playlistData.forEach((item, index) => {
+                    const isPlaying = index === this.currentVideoIndex;
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = `p-2 sm:p-3 flex items-center justify-between cursor-pointer transition duration-150 ${isPlaying ? 'bg-blue-100 border-l-4 border-blue-500' : 'hover:bg-gray-50'}`;
+                    itemDiv.onclick = (e) => { if (!e.target.closest('button, input')) this.openVideo(index); };
+
+                    const infoDiv = document.createElement('div');
+                    infoDiv.className = 'flex items-center min-w-0 flex-grow';
+                    
+                    const indexSpan = document.createElement('span');
+                    indexSpan.className = 'text-xs font-mono text-gray-400 mr-2 sm:mr-3 w-5 text-right flex-shrink-0';
+                    indexSpan.textContent = `${index + 1}.`;
+
+                    const titleInput = document.createElement('input');
+                    titleInput.type = 'text';
+                    titleInput.value = item.title;
+                    titleInput.className = `editable-title ${isPlaying ? 'text-blue-900 font-bold' : 'text-gray-800 font-medium'} truncate flex-grow`;
+                    titleInput.onblur = () => this.handleTitleEdit(index, titleInput);
+                    titleInput.onkeydown = (e) => { if (e.key === 'Enter') titleInput.blur(); };
+
+                    infoDiv.appendChild(indexSpan);
+                    infoDiv.appendChild(titleInput);
+
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'text-red-400 hover:text-red-600 ml-2 p-1 transition flex-shrink-0';
+                    removeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 pointer-events-none" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 6h6v8H7V6z" clip-rule="evenodd" /></svg>`;
+                    removeBtn.onclick = (e) => { e.stopPropagation(); this.removeItem(index); };
+                    
+                    itemDiv.appendChild(infoDiv);
+                    itemDiv.appendChild(removeBtn);
+                    this.els.playlistContainer.appendChild(itemDiv);
+                });
+            }
+
+            // --- Advanced Playback API Integration ---
+
+            openVideo(index) {
+                if (this.playlistData.length === 0) return;
+                this.els.videoSection.classList.remove('hidden');
+                this.loadVideo(index);
+            }
+
+            closeVideo() {
+                this.els.videoSection.classList.add('hidden');
+                this.destroy(); // stop playback and clear interval
+                this.els.embedContainer.querySelectorAll('.api-target').forEach(e => e.remove()); // remove iframes
+                this.currentVideoIndex = -1;
+                this.updateUI();
+                if(this.isDjMode) this.toggleDjMode(); // Turn off DJ mode if closing
+            }
+
+            destroy() {
+                if(this.pollInterval) clearInterval(this.pollInterval);
+                if(this.platformPlayer) {
+                    if (this.currentPlatform === 'youtube' && typeof this.platformPlayer.destroy === 'function') {
+                        this.platformPlayer.destroy();
+                    } else if (this.currentPlatform === 'vimeo' && typeof this.platformPlayer.destroy === 'function') {
+                        this.platformPlayer.destroy();
+                    }
+                }
+                this.platformPlayer = null;
+                this.playbackState = { currentTime: 0, duration: 0, playing: false };
+                this.clearMarkers();
+            }
+
+            loadVideo(index) {
+                if (index < 0 || index >= this.playlistData.length) return;
+                
+                this.destroy();
+                this.currentVideoIndex = index;
+                const videoItem = this.playlistData[index];
+                const isAutoplay = this.els.autoplayToggle.checked;
+                
+                this.els.videoDisplayTitle.textContent = videoItem.title;
+                this.els.videoCounter.textContent = `${index + 1} / ${this.playlistData.length}`;
+                this.els.prevBtn.disabled = index === 0;
+                this.els.nextBtn.disabled = index === this.playlistData.length - 1;
+
+                // Create a fresh DOM target for the API
+                this.els.embedContainer.querySelectorAll('.api-target').forEach(e => e.remove());
+                const targetDiv = document.createElement('div');
+                targetDiv.className = 'api-target';
+                targetDiv.id = `api-target-${this.storageKey}-${Date.now()}`;
+                
+                // Append BEFORE the turntable overlay so turntable stays on top
+                this.els.embedContainer.insertBefore(targetDiv, this.els.turntable);
+                
+                this.currentPlatform = videoItem.platform;
+
+                if (this.currentPlatform === 'youtube') {
+                    if (!isYouTubeReady) {
+                        this.showMessage("YouTube API loading, retrying in 1s...");
+                        setTimeout(() => this.loadVideo(index), 1000);
+                        return;
+                    }
+                    this.platformPlayer = new YT.Player(targetDiv.id, {
+                        videoId: videoItem.id,
+                        playerVars: { autoplay: isAutoplay ? 1 : 0, rel: 0, controls: 1, disablekb: 1 },
+                        events: {
+                            onReady: (e) => { 
+                                this.setVolume(this.els.volSlider.value);
+                            },
+                            onStateChange: (e) => {
+                                this.playbackState.playing = (e.data === YT.PlayerState.PLAYING);
+                            }
+                        }
+                    });
+                    // YouTube doesn't have a timeupdate event, so we poll
+                    this.pollInterval = setInterval(() => this.pollState(), 100);
+
+                } else if (this.currentPlatform === 'vimeo') {
+                    this.platformPlayer = new Vimeo.Player(targetDiv.id, {
+                        id: videoItem.id,
+                        autoplay: isAutoplay
+                    });
+                    this.platformPlayer.on('play', () => this.playbackState.playing = true);
+                    this.platformPlayer.on('pause', () => this.playbackState.playing = false);
+                    this.platformPlayer.on('timeupdate', (data) => {
+                        this.playbackState.currentTime = data.seconds;
+                        this.playbackState.duration = data.duration;
+                        this.onTimeUpdate();
+                    });
+                    this.platformPlayer.ready().then(() => {
+                        this.setVolume(this.els.volSlider.value);
+                    });
+                    // Fallback polling for UI smooth update during scrubs where events might lag
+                    this.pollInterval = setInterval(() => this.pollState(), 200);
+                }
+                
+                this.updateUI();
+            }
+
+            pollState() {
+                if(!this.platformPlayer) return;
+                
+                if (this.currentPlatform === 'youtube' && typeof this.platformPlayer.getCurrentTime === 'function') {
+                    this.playbackState.currentTime = this.platformPlayer.getCurrentTime() || 0;
+                    this.playbackState.duration = this.platformPlayer.getDuration() || 0;
+                    this.onTimeUpdate();
+                } else if (this.currentPlatform === 'vimeo') {
+                    // Try fetch if promise resolves fast enough, but primary rely on timeupdate event
+                    this.platformPlayer.getCurrentTime().then(t => { this.playbackState.currentTime = t; });
+                    this.platformPlayer.getDuration().then(d => { this.playbackState.duration = d; });
+                    this.onTimeUpdate();
+                }
+            }
+
+            onTimeUpdate() {
+                if(this.playbackState.duration > 0 && this.isDjMode) {
+                    // Update Progress Ring
+                    const progress = this.playbackState.currentTime / this.playbackState.duration;
+                    const circumference = 2 * Math.PI * 48; // r=48
+                    const offset = circumference - (progress * circumference);
+                    this.els.progressRing.style.strokeDashoffset = Math.max(0, offset);
+                }
+                this.checkLoop();
+            }
+
+            apiSeekTo(seconds) {
+                if(!this.platformPlayer) return;
+                let target = Math.max(0, Math.min(seconds, this.playbackState.duration - 1)); // Cap to duration
+                
+                if (this.currentPlatform === 'youtube') {
+                    this.platformPlayer.seekTo(target, true);
+                } else if (this.currentPlatform === 'vimeo') {
+                    this.platformPlayer.setCurrentTime(target);
+                }
+                this.playbackState.currentTime = target;
+            }
+
+            setVolume(val) {
+                if(!this.platformPlayer) return;
+                let vol = parseInt(val);
+                if (this.currentPlatform === 'youtube' && typeof this.platformPlayer.setVolume === 'function') {
+                    this.platformPlayer.setVolume(vol);
+                } else if (this.currentPlatform === 'vimeo') {
+                    this.platformPlayer.setVolume(vol / 100);
+                }
+            }
+            
+            // --- DJ Mode & Turntable Logic ---
+
+            toggleDjMode() {
+                this.isDjMode = !this.isDjMode;
+                if (this.isDjMode) {
+                    this.els.djToggle.classList.replace('bg-indigo-600', 'bg-emerald-500');
+                    this.els.djToggle.classList.replace('hover:bg-indigo-700', 'hover:bg-emerald-600');
+                    this.els.embedContainer.classList.add('dj-mode-active');
+                    this.els.djControls.classList.remove('hidden');
+                    this.els.djControls.classList.add('flex');
+                } else {
+                    this.els.djToggle.classList.replace('bg-emerald-500', 'bg-indigo-600');
+                    this.els.djToggle.classList.replace('hover:bg-emerald-600', 'hover:bg-indigo-700');
+                    this.els.embedContainer.classList.remove('dj-mode-active');
+                    this.els.djControls.classList.add('hidden');
+                    this.els.djControls.classList.remove('flex');
+                }
+            }
+
+            startDrag(e) {
+                if (!this.isDjMode || !this.playbackState.duration) return;
+                this.isDragging = true;
+                const rect = this.els.turntable.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                let clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                let clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                
+                this.lastAngle = Math.atan2(clientY - centerY, clientX - centerX);
+                
+                if (e.cancelable) e.preventDefault(); // Prevent scrolling on mobile
+            }
+
+            onDrag(e) {
+                if (!this.isDragging || !this.isDjMode) return;
+                const rect = this.els.turntable.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                let clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                let clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                
+                let currentAngle = Math.atan2(clientY - centerY, clientX - centerX);
+                let delta = currentAngle - this.lastAngle;
+                
+                // Handle wrap-around (-180 to 180 degrees)
+                if (delta > Math.PI) delta -= Math.PI * 2;
+                if (delta < -Math.PI) delta += Math.PI * 2;
+
+                // Scrub Sensitivity: 1 full rotation (2 PI) = 30 seconds of video
+                let secondsToScrub = (delta / (Math.PI * 2)) * 30;
+                
+                let newTime = this.playbackState.currentTime + secondsToScrub;
+                this.apiSeekTo(newTime);
+                
+                this.lastAngle = currentAngle;
+                if (e.cancelable) e.preventDefault();
+            }
+
+            endDrag() {
+                this.isDragging = false;
+            }
+
+            // --- Marker & Looping Logic ---
+            
+            setMarker(type) {
+                const time = this.playbackState.currentTime;
+                const circumference = 2 * Math.PI * 48; // r=48
+                const progress = time / this.playbackState.duration;
+                // Angle formula corresponding to stroke layout (-90deg offset)
+                const angle = (progress * 360) - 90;
+                const rad = angle * (Math.PI / 180);
+                const cx = 50 + 48 * Math.cos(rad);
+                const cy = 50 + 48 * Math.sin(rad);
+
+                if (type === 'A') {
+                    this.markerA = time;
+                    this.els.dispMarkA.textContent = formatTime(time);
+                    this.els.markerADot.setAttribute('cx', cx);
+                    this.els.markerADot.setAttribute('cy', cy);
+                    this.els.markerADot.classList.remove('hidden');
+                } else if (type === 'B') {
+                    this.markerB = time;
+                    this.els.dispMarkB.textContent = formatTime(time);
+                    this.els.markerBDot.setAttribute('cx', cx);
+                    this.els.markerBDot.setAttribute('cy', cy);
+                    this.els.markerBDot.classList.remove('hidden');
+                }
+
+                // Enable loop button if both are set
+                if (this.markerA !== null && this.markerB !== null) {
+                    // Ensure A is before B
+                    if (this.markerA > this.markerB) {
+                        // Swap them
+                        let temp = this.markerA;
+                        this.markerA = this.markerB;
+                        this.markerB = temp;
+                        this.els.dispMarkA.textContent = formatTime(this.markerA);
+                        this.els.dispMarkB.textContent = formatTime(this.markerB);
+                        // Swap visual dots
+                        let ax = this.els.markerADot.getAttribute('cx'); let ay = this.els.markerADot.getAttribute('cy');
+                        let bx = this.els.markerBDot.getAttribute('cx'); let by = this.els.markerBDot.getAttribute('cy');
+                        this.els.markerADot.setAttribute('cx', bx); this.els.markerADot.setAttribute('cy', by);
+                        this.els.markerBDot.setAttribute('cx', ax); this.els.markerBDot.setAttribute('cy', ay);
+                    }
+                    this.els.btnToggleLoop.disabled = false;
+                }
+            }
+
+            clearMarkers() {
+                this.markerA = null;
+                this.markerB = null;
+                this.isLooping = false;
+                this.els.dispMarkA.textContent = '--:--';
+                this.els.dispMarkB.textContent = '--:--';
+                this.els.markerADot.classList.add('hidden');
+                this.els.markerBDot.classList.add('hidden');
+                this.els.btnToggleLoop.disabled = true;
+                this.updateLoopBtnVisuals();
+                this.els.dispLoopStat.textContent = '0';
+            }
+
+            toggleLoop() {
+                if (this.markerA === null || this.markerB === null) return;
+                this.isLooping = !this.isLooping;
+                
+                if (this.isLooping) {
+                    const rawInput = this.els.inpLoopCount.value;
+                    this.loopsRemaining = rawInput ? parseInt(rawInput) : -1;
+                    this.els.dispLoopStat.textContent = this.loopsRemaining === -1 ? '∞' : this.loopsRemaining;
+                    // Auto jump to A if we are past B when enabling
+                    if (this.playbackState.currentTime >= this.markerB) this.apiSeekTo(this.markerA);
+                } else {
+                    this.els.dispLoopStat.textContent = '0';
+                }
+                this.updateLoopBtnVisuals();
+            }
+
+            updateLoopBtnVisuals() {
+                if (this.isLooping) {
+                    this.els.btnToggleLoop.classList.replace('bg-gray-600', 'bg-blue-600');
+                    this.els.btnToggleLoop.classList.replace('hover:bg-gray-500', 'hover:bg-blue-500');
+                } else {
+                    this.els.btnToggleLoop.classList.replace('bg-blue-600', 'bg-gray-600');
+                    this.els.btnToggleLoop.classList.replace('hover:bg-blue-500', 'hover:bg-gray-500');
+                }
+            }
+
+            checkLoop() {
+                if (!this.isLooping || this.markerA === null || this.markerB === null) return;
+
+                // Threshold buffer to prevent skipping the exact millisecond check
+                if (this.playbackState.currentTime >= this.markerB) {
+                    if (this.loopsRemaining > 0) {
+                        this.loopsRemaining--;
+                        this.els.dispLoopStat.textContent = this.loopsRemaining;
+                        this.apiSeekTo(this.markerA);
+                    } else if (this.loopsRemaining === -1) {
+                        // Infinite
+                        this.apiSeekTo(this.markerA);
+                    } else if (this.loopsRemaining === 0) {
+                        // Done looping
+                        this.isLooping = false;
+                        this.updateLoopBtnVisuals();
+                        if (this.currentPlatform === 'youtube') this.platformPlayer.pauseVideo();
+                        if (this.currentPlatform === 'vimeo') this.platformPlayer.pause();
+                    }
+                }
+            }
+
+
+            // --- Import / Export ---
+
+            exportCSV() {
+                if (this.playlistData.length === 0) return this.showMessage("Playlist is empty.");
+                let csvContent = "Title,VideoID,Platform\n";
+                this.playlistData.forEach(item => {
+                    const safeTitle = `"${item.title.replace(/"/g, '""')}"`; 
+                    csvContent += `${safeTitle},${item.id},${item.platform}\n`;
+                });
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `${this.storageKey}_export.csv`;
+                link.click();
+            }
+
+            importCSV(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const lines = e.target.result.split('\n').filter(l => l.trim());
+                        if (lines.length < 2 || !lines[0].toLowerCase().includes("title")) return this.showMessage("Invalid CSV format.");
+                        
+                        const newPlaylist = [];
+                        for (let i = 1; i < lines.length; i++) {
+                            const parts = lines[i].match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || []; 
+                            if (parts.length >= 2) {
+                                let title = parts[0].trim().replace(/^"|"$/g, '').replace(/""/g, '"');
+                                let id = parts[1].trim();
+                                let platform = parts.length > 2 ? parts[2].trim().toLowerCase() : 'youtube';
+                                if (id && (platform === 'youtube' || platform === 'vimeo')) newPlaylist.push({ title, id, platform });
+                            }
+                        }
+                        if (newPlaylist.length > 0) {
+                            this.playlistData = newPlaylist;
+                            this.savePlaylistToLocal();
+                            this.updateUI();
+                            this.showMessage(`Imported ${newPlaylist.length} videos.`);
+                        }
+                    } catch (error) {
+                        this.showMessage("Error processing file.");
+                    } finally {
+                        this.els.importInput.value = '';
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        // --- Global Initialization ---
+        let playerCount = 0;
+
+        function addPlayer() {
+            playerCount++;
+            new PlaylistPlayer(
+                'players-grid', 
+                `playlist_data_slot_${playerCount}`, 
+                `Deck ${playerCount}`
+            );
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Start with two players as requested
+            addPlayer();
+            addPlayer();
+
+            // Add Player Button
+            document.getElementById('addPlayerBtn').addEventListener('click', addPlayer);
+
+            // Instruction Modal Logic
+            const infoBtn = document.getElementById('infoButton');
+            const modal = document.getElementById('instructionModal');
+            
+            infoBtn.addEventListener('click', () => {
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            });
+            
+            window.closeInstructionModal = function(event) {
+                if (event && event.target !== modal) return;
+                modal.classList.add('hidden');
+                document.body.style.overflow = '';
+            }
+        });
+    </script>
+</body>
+</html>
